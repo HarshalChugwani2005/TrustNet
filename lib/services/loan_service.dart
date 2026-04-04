@@ -17,6 +17,27 @@ class LoanService {
   static const int _maxTrustScore = 100;
   static const double _defaultPenaltyPoints = 25.0;
 
+  double _collateralPercentFromTrustScore(int trustScore) {
+    if (trustScore >= 80) {
+      return 0.05;
+    }
+    if (trustScore >= 60) {
+      return 0.10;
+    }
+    if (trustScore >= 40) {
+      return 0.15;
+    }
+    return 0.25;
+  }
+
+  double _round2(double value) {
+    return (value * 100).roundToDouble() / 100;
+  }
+
+  double _readBalance(Map<String, dynamic> data, String key) {
+    return (data[key] ?? 0).toDouble();
+  }
+
   String _generateTxHash() {
     final random = Random();
     const chars = '0123456789abcdef';
@@ -87,6 +108,44 @@ class LoanService {
 
   Future<void> requestLoan(LoanModel loan) async {
     final docRef = _firestore.collection('loans').doc();
+    final borrowerRef = _firestore.collection('users').doc(loan.borrowerId);
+
+    int borrowerTrustScore = loan.borrowerTrustScore;
+    var collateralPercent = _collateralPercentFromTrustScore(borrowerTrustScore);
+    var collateralAmount = _round2(loan.amount * collateralPercent);
+
+    await _firestore.runTransaction((transaction) async {
+      final borrowerSnap = await transaction.get(borrowerRef);
+      final borrowerData = borrowerSnap.data() ?? <String, dynamic>{};
+
+        borrowerTrustScore =
+          (borrowerData['trustScore'] as num?)?.toInt() ?? borrowerTrustScore;
+      collateralPercent = _collateralPercentFromTrustScore(borrowerTrustScore);
+      collateralAmount = _round2(loan.amount * collateralPercent);
+
+      if (collateralAmount > loan.amount) {
+        throw Exception('Collateral cannot be greater than requested loan amount.');
+      }
+
+      final walletBalance = _readBalance(borrowerData, 'wallet_balance');
+      final lockedBalance = _readBalance(borrowerData, 'locked_balance');
+
+      if (walletBalance < collateralAmount) {
+        throw Exception(
+        'Insufficient wallet balance for collateral. Required: ₹${collateralAmount.toStringAsFixed(0)}. Please add funds first.');
+      }
+
+      transaction.set(
+        borrowerRef,
+        {
+          'wallet_balance': _round2(walletBalance - collateralAmount),
+          'locked_balance': _round2(lockedBalance + collateralAmount),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    });
+
     String txHash = _generateTxHash();
     int blockNumber = _generateBlock();
     int? onChainLoanId;
@@ -113,11 +172,15 @@ class LoanService {
       id: docRef.id,
       borrowerId: loan.borrowerId,
       borrowerName: loan.borrowerName,
-      borrowerTrustScore: loan.borrowerTrustScore,
+      borrowerTrustScore: borrowerTrustScore,
       amount: loan.amount,
       duration: loan.duration,
       purpose: loan.purpose,
       status: 'pending',
+      collateralAmount: collateralAmount,
+      collateralPercent: collateralPercent,
+      collateralLocked: true,
+      collateralTransferred: false,
       txHash: txHash,
       blockNumber: blockNumber,
       onChainLoanId: onChainLoanId,
@@ -218,27 +281,141 @@ class LoanService {
       }
     }
 
-    final Map<String, dynamic> data = {
-      'status': status,
-      'txHash': txHash,
-      'blockNumber': blockNumber,
-      'executionMode': usedOnChain ? 'onchain' : 'simulated',
-    };
+    final loanRef = _firestore.collection('loans').doc(loan.id);
+    final effectiveLenderId = lenderId ?? loan.lenderId;
 
-    if (lenderId != null) {
-      data['lenderId'] = lenderId;
-    }
+    await _firestore.runTransaction((transaction) async {
+      final loanSnap = await transaction.get(loanRef);
+      final loanData = loanSnap.data() ?? <String, dynamic>{};
 
-    if (status == 'approved') {
-      data['approvedAt'] = FieldValue.serverTimestamp();
-      data['nextDueAt'] = Timestamp.fromDate(DateTime.now().add(const Duration(days: 30)));
-      data['repaidAmount'] = 0.0;
-      data['onTimeStreak'] = 0;
-    }
+      final borrowerId = (loanData['borrowerId'] ?? loan.borrowerId).toString();
+      final borrowerRef = _firestore.collection('users').doc(borrowerId);
+      final borrowerSnap = await transaction.get(borrowerRef);
+      final borrowerData = borrowerSnap.data() ?? <String, dynamic>{};
 
-    await _firestore.collection('loans').doc(loan.id).update(data);
+      final collateralAmount = (loanData['collateralAmount'] ?? 0).toDouble();
+      final collateralLocked = loanData['collateralLocked'] == true;
+      final collateralTransferred = loanData['collateralTransferred'] == true;
 
-    final action = status == 'approved' ? 'approved' : 'rejected';
+      final update = <String, dynamic>{
+        'status': status,
+        'txHash': txHash,
+        'blockNumber': blockNumber,
+        'executionMode': usedOnChain ? 'onchain' : 'simulated',
+      };
+
+      if (effectiveLenderId != null && effectiveLenderId.isNotEmpty) {
+        update['lenderId'] = effectiveLenderId;
+      }
+
+      if (status == 'approved') {
+        if (effectiveLenderId == null || effectiveLenderId.isEmpty) {
+          throw Exception('Lender is required to approve this loan.');
+        }
+
+        final lenderRef = _firestore.collection('users').doc(effectiveLenderId);
+        final lenderSnap = await transaction.get(lenderRef);
+        final lenderData = lenderSnap.data() ?? <String, dynamic>{};
+
+        final lenderWallet = _readBalance(lenderData, 'wallet_balance');
+        final borrowerWallet = _readBalance(borrowerData, 'wallet_balance');
+        final loanAmount = (loanData['amount'] ?? loan.amount).toDouble();
+
+        if (lenderWallet < loanAmount) {
+          throw Exception('Lender wallet has insufficient balance to fund this loan.');
+        }
+
+        transaction.set(
+          lenderRef,
+          {
+            'wallet_balance': _round2(lenderWallet - loanAmount),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        transaction.set(
+          borrowerRef,
+          {
+            'wallet_balance': _round2(borrowerWallet + loanAmount),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        update['approvedAt'] = FieldValue.serverTimestamp();
+        update['nextDueAt'] = Timestamp.fromDate(DateTime.now().add(const Duration(days: 30)));
+        update['repaidAmount'] = 0.0;
+        update['onTimeStreak'] = 0;
+      }
+
+      if (status == 'rejected' && collateralLocked && collateralAmount > 0) {
+        final borrowerWallet = _readBalance(borrowerData, 'wallet_balance');
+        final borrowerLocked = _readBalance(borrowerData, 'locked_balance');
+        final releasable = min(collateralAmount, borrowerLocked);
+
+        transaction.set(
+          borrowerRef,
+          {
+            'wallet_balance': _round2(borrowerWallet + releasable),
+            'locked_balance': _round2(borrowerLocked - releasable),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        update['collateralLocked'] = false;
+        update['collateralReleasedAt'] = FieldValue.serverTimestamp();
+      }
+
+      if ((status == 'defaulted' || status == 'written_off') &&
+          collateralLocked &&
+          !collateralTransferred &&
+          collateralAmount > 0) {
+        if (effectiveLenderId == null || effectiveLenderId.isEmpty) {
+          throw Exception('Lender is required to claim collateral on default.');
+        }
+
+        final lenderRef = _firestore.collection('users').doc(effectiveLenderId);
+        final lenderSnap = await transaction.get(lenderRef);
+        final lenderData = lenderSnap.data() ?? <String, dynamic>{};
+
+        final borrowerLocked = _readBalance(borrowerData, 'locked_balance');
+        final lenderWallet = _readBalance(lenderData, 'wallet_balance');
+        final claimable = min(collateralAmount, borrowerLocked);
+
+        transaction.set(
+          borrowerRef,
+          {
+            'locked_balance': _round2(borrowerLocked - claimable),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        transaction.set(
+          lenderRef,
+          {
+            'wallet_balance': _round2(lenderWallet + claimable),
+            'updatedAt': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+
+        update['collateralLocked'] = false;
+        update['collateralTransferred'] = true;
+        update['collateralClaimedAmount'] = claimable;
+        update['collateralClaimedAt'] = FieldValue.serverTimestamp();
+      }
+
+      transaction.update(loanRef, update);
+    });
+
+    final action = status == 'approved'
+        ? 'approved'
+        : status == 'rejected'
+            ? 'rejected'
+            : status;
     await NotificationService().sendNotification(
       targetUserId: loan.borrowerId,
       title: 'Loan $status',
@@ -355,7 +532,14 @@ class LoanService {
       }
     }
 
-    final batch = _firestore.batch();
+    final lenderId = (latestData['lenderId'] ?? loan.lenderId ?? '').toString();
+    if (lenderId.isEmpty) {
+      throw Exception('No lender linked to this loan yet.');
+    }
+
+    final borrowerRef = _firestore.collection('users').doc(loan.borrowerId);
+    final lenderRef = _firestore.collection('users').doc(lenderId);
+
     final Map<String, dynamic> loanUpdate = {
       'status': isFullyRepaid ? 'repaid' : 'approved',
       'repaidAmount': nextRepaidAmount,
@@ -379,14 +563,70 @@ class LoanService {
       loanUpdate['nextDueAt'] = Timestamp.fromDate(nextDueAtUpdate);
     }
 
-    batch.update(loanRef, loanUpdate);
+    await _firestore.runTransaction((transaction) async {
+      final borrowerSnap = await transaction.get(borrowerRef);
+      final lenderSnap = await transaction.get(lenderRef);
+      final currentLoanSnap = await transaction.get(loanRef);
 
-    await batch.commit();
+      final borrowerData = borrowerSnap.data() ?? <String, dynamic>{};
+      final lenderData = lenderSnap.data() ?? <String, dynamic>{};
+      final currentLoan = currentLoanSnap.data() ?? <String, dynamic>{};
+
+      final borrowerWallet = _readBalance(borrowerData, 'wallet_balance');
+      final lenderWallet = _readBalance(lenderData, 'wallet_balance');
+
+      if (borrowerWallet < paymentAmount) {
+        throw Exception('Borrower wallet has insufficient balance for repayment.');
+      }
+
+      transaction.set(
+        borrowerRef,
+        {
+          'wallet_balance': _round2(borrowerWallet - paymentAmount),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      transaction.set(
+        lenderRef,
+        {
+          'wallet_balance': _round2(lenderWallet + paymentAmount),
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      if (isFullyRepaid) {
+        final borrowerLocked = _readBalance(borrowerData, 'locked_balance');
+        final collateralAmount = (currentLoan['collateralAmount'] ?? 0).toDouble();
+        final collateralLocked = currentLoan['collateralLocked'] == true;
+
+        if (collateralLocked && collateralAmount > 0) {
+          final releasable = min(collateralAmount, borrowerLocked);
+          transaction.set(
+            borrowerRef,
+            {
+              'wallet_balance': _round2((borrowerWallet - paymentAmount) + releasable),
+              'locked_balance': _round2(borrowerLocked - releasable),
+              'updatedAt': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+
+          loanUpdate['collateralLocked'] = false;
+          loanUpdate['collateralReleasedAt'] = FieldValue.serverTimestamp();
+        }
+      }
+
+      transaction.update(loanRef, loanUpdate);
+    });
+
     await _refreshBorrowerTrustScore(loan.borrowerId);
 
-    if (loan.lenderId != null && loan.lenderId!.isNotEmpty) {
+    if (lenderId.isNotEmpty) {
       await NotificationService().sendNotification(
-        targetUserId: loan.lenderId!,
+        targetUserId: lenderId,
         title: isFullyRepaid ? 'Loan Fully Repaid' : 'Partial Repayment Received',
         message: isFullyRepaid
             ? 'The loan of ₹${loanAmount.toStringAsFixed(0)} to ${loan.borrowerName} was fully repaid.'

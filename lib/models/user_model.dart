@@ -4,6 +4,8 @@ class UserModel {
   final String fullName;
   final String role;
   final int trustScore;
+  final double walletBalance;
+  final double lockedBalance;
   final String? walletAddress;
 
   UserModel({
@@ -12,6 +14,8 @@ class UserModel {
     required this.fullName,
     required this.role,
     this.trustScore = 50,
+    this.walletBalance = 0,
+    this.lockedBalance = 0,
     this.walletAddress,
   });
 
@@ -22,6 +26,8 @@ class UserModel {
       fullName: data['fullName'] ?? '',
       role: data['role'] ?? 'borrower',
       trustScore: data['trustScore'] ?? 50,
+      walletBalance: (data['wallet_balance'] ?? data['walletBalance'] ?? 0).toDouble(),
+      lockedBalance: (data['locked_balance'] ?? data['lockedBalance'] ?? 0).toDouble(),
       walletAddress: data['walletAddress'],
     );
   }
@@ -32,6 +38,8 @@ class UserModel {
       'fullName': fullName,
       'role': role,
       'trustScore': trustScore,
+      'wallet_balance': walletBalance,
+      'locked_balance': lockedBalance,
       'walletAddress': walletAddress,
     };
   }

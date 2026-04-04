@@ -10,7 +10,22 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'wallet_balance',
+          'locked_balance',
+          'trustScore',
+          'trustScoreRaw',
+          'trustScoreUpdatedAt',
+          'updatedAt',
+          'fullName',
+          'email',
+          'role',
+          'walletAddress'
+        ]);
+      allow delete: if false;
     }
 
     match /loans/{loanId} {

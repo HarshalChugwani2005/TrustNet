@@ -142,6 +142,8 @@ class AuthService {
     final payload = <String, dynamic>{
       'fullName': fullName,
       'email': email,
+      'wallet_balance': FieldValue.increment(0),
+      'locked_balance': FieldValue.increment(0),
       'updatedAt': FieldValue.serverTimestamp(),
     };
 

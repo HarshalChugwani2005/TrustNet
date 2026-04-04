@@ -21,7 +21,7 @@ class HomeDashboardScreen extends StatelessWidget {
     }
     
     final role = user?.role ?? 'borrower';
-    final trustScore = user?.trustScore ?? 74;
+    final trustScore = user?.trustScore ?? 50;
     final borrowerName = user?.fullName;
 
     return SafeArea(
@@ -47,6 +47,32 @@ class HomeDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2),
           TrustScoreCard(score: trustScore),
+          const SizedBox(height: AppSpace.x2 - 2),
+          SectionCard(
+            title: role == 'borrower' ? 'Borrower Wallet' : 'Lender Wallet',
+            trailing: const TrustBadge(label: 'Virtual Money'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Available balance: ₹${(user?.walletBalance ?? 0).toStringAsFixed(0)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Locked collateral: ₹${(user?.lockedBalance ?? 0).toStringAsFixed(0)}',
+                  style: const TextStyle(color: mutedInk),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  role == 'borrower'
+                      ? 'Collateral is locked as security deposit until repayment or default resolution.'
+                      : 'Your wallet is used to fund approved loans and receives repayments/collateral claims.',
+                  style: const TextStyle(color: mutedInk),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
             title: role == 'borrower' ? 'Active Loans' : 'Active Investments',

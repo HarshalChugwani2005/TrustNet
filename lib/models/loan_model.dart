@@ -10,6 +10,10 @@ class LoanModel {
   final String purpose;
   final String status;
   final double repaidAmount;
+  final double collateralAmount;
+  final double collateralPercent;
+  final bool collateralLocked;
+  final bool collateralTransferred;
   final String? lenderId;
   final String? txHash;
   final int? blockNumber;
@@ -26,6 +30,10 @@ class LoanModel {
     required this.purpose,
     this.status = 'pending',
     this.repaidAmount = 0,
+    this.collateralAmount = 0,
+    this.collateralPercent = 0,
+    this.collateralLocked = false,
+    this.collateralTransferred = false,
     this.lenderId,
     this.txHash,
     this.blockNumber,
@@ -44,6 +52,10 @@ class LoanModel {
       purpose: data['purpose'] ?? '',
       status: data['status'] ?? 'pending',
       repaidAmount: (data['repaidAmount'] ?? 0).toDouble(),
+      collateralAmount: (data['collateralAmount'] ?? 0).toDouble(),
+      collateralPercent: (data['collateralPercent'] ?? 0).toDouble(),
+      collateralLocked: data['collateralLocked'] ?? false,
+      collateralTransferred: data['collateralTransferred'] ?? false,
       lenderId: data['lenderId'],
       txHash: data['txHash'],
       blockNumber: data['blockNumber'],
@@ -64,6 +76,10 @@ class LoanModel {
       'purpose': purpose,
       'status': status,
       'repaidAmount': repaidAmount,
+      'collateralAmount': collateralAmount,
+      'collateralPercent': collateralPercent,
+      'collateralLocked': collateralLocked,
+      'collateralTransferred': collateralTransferred,
       'lenderId': lenderId,
       'txHash': txHash,
       'blockNumber': blockNumber,

@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/loan_model.dart';
 import '../providers/user_provider.dart';
 import '../services/loan_service.dart';
+import '../services/virtual_wallet_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_cards.dart';
 
@@ -27,6 +28,62 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
   final _durationController = TextEditingController();
   final _purposeController = TextEditingController();
   bool _isLoading = false;
+
+  double _collateralPercentFromTrustScore(int trustScore) {
+    if (trustScore >= 80) {
+      return 0.05;
+    }
+    if (trustScore >= 60) {
+      return 0.10;
+    }
+    if (trustScore >= 40) {
+      return 0.15;
+    }
+    return 0.25;
+  }
+
+  Future<void> _addFunds(String userId) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Wallet Funds'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Amount',
+            hintText: 'e.g. 2000',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = double.tryParse(controller.text.trim());
+              Navigator.of(context).pop(parsed);
+            },
+            child: const Text('Add'),
+          )
+        ],
+      ),
+    );
+
+    if (amount == null || amount <= 0) {
+      return;
+    }
+
+    await VirtualWalletService().addFunds(userId: userId, amount: amount);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('₹${amount.toStringAsFixed(0)} added to your wallet.')),
+    );
+  }
 
   @override
   void dispose() {
@@ -52,6 +109,17 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid amount')),
+      );
+      return;
+    }
+
+    final collateralPercent = _collateralPercentFromTrustScore(widget.trustScore);
+    final collateralEstimate = amount * collateralPercent;
+    if (collateralEstimate > amount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Collateral cannot be greater than requested amount.'),
+        ),
       );
       return;
     }
@@ -107,6 +175,11 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<UserProvider>(context).currentUser;
+    final amountPreview = double.tryParse(_amountController.text.trim()) ?? 0;
+    final collateralPercent = _collateralPercentFromTrustScore(widget.trustScore);
+    final collateralPreview = amountPreview <= 0 ? 0 : amountPreview * collateralPercent;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Request Loan')),
       body: ListView(
@@ -115,6 +188,28 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
           const StatusBadge(label: 'Step 1 of 2', color: primaryBlue),
           const SizedBox(height: 10),
           TrustScoreCard(score: widget.trustScore),
+          const SizedBox(height: 10),
+          SectionCard(
+            title: 'Virtual Wallet',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Available: ₹${(user?.walletBalance ?? 0).toStringAsFixed(0)}'),
+                const SizedBox(height: 4),
+                Text('Locked collateral: ₹${(user?.lockedBalance ?? 0).toStringAsFixed(0)}'),
+                const SizedBox(height: 8),
+                Text(
+                  'Collateral estimate: ₹${collateralPreview.toStringAsFixed(0)} (${(collateralPercent * 100).toStringAsFixed(0)}%)',
+                  style: const TextStyle(color: mutedInk),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonal(
+                  onPressed: user == null ? null : () => _addFunds(user.uid),
+                  child: const Text('Add Funds to Wallet'),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: AppSpace.x2 - 2),
           const Text(
             'Loan Details',
@@ -128,6 +223,7 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
           const SizedBox(height: AppSpace.x2 - 4),
           TextField(
             controller: _amountController,
+            onChanged: (_) => setState(() {}),
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: 'Loan amount',
@@ -264,6 +360,11 @@ class LenderLoanRequestsScreen extends StatelessWidget {
                               fontWeight: FontWeight.w700, color: ink),
                         ),
                         const SizedBox(height: 2),
+                        Text(
+                          'Collateral: ₹${item.collateralAmount.toStringAsFixed(0)} (${(item.collateralPercent * 100).toStringAsFixed(0)}%)',
+                          style: const TextStyle(color: mutedInk),
+                        ),
+                        const SizedBox(height: 2),
                         Text('Purpose: ${item.purpose}'),
                         const SizedBox(height: 10),
                         const Row(
@@ -309,6 +410,49 @@ class _LenderBorrowerDetailsScreenState
     extends State<LenderBorrowerDetailsScreen> {
   bool _isLoading = false;
 
+  Future<void> _addFunds(String userId) async {
+    final controller = TextEditingController();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Wallet Funds'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Amount',
+            hintText: 'e.g. 5000',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = double.tryParse(controller.text.trim());
+              Navigator.of(context).pop(parsed);
+            },
+            child: const Text('Add'),
+          )
+        ],
+      ),
+    );
+
+    if (amount == null || amount <= 0) {
+      return;
+    }
+
+    await VirtualWalletService().addFunds(userId: userId, amount: amount);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('₹${amount.toStringAsFixed(0)} added to your wallet.')),
+    );
+  }
+
   Future<void> _updateStatus(String status) async {
     setState(() => _isLoading = true);
     try {
@@ -350,6 +494,8 @@ class _LenderBorrowerDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final lender = Provider.of<UserProvider>(context).currentUser;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Borrower Details')),
       body: ListView(
@@ -366,9 +512,30 @@ class _LenderBorrowerDetailsScreenState
               children: [
                 Text('Requested amount: ₹${widget.loan.amount.toStringAsFixed(0)}'),
                 const SizedBox(height: 6),
+                Text(
+                  'Collateral locked: ₹${widget.loan.collateralAmount.toStringAsFixed(0)} (${(widget.loan.collateralPercent * 100).toStringAsFixed(0)}%)',
+                ),
+                const SizedBox(height: 6),
                 Text('Duration: ${widget.loan.duration}'),
                 const SizedBox(height: 6),
                 Text('Purpose: ${widget.loan.purpose}'),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.x2 - 2),
+          SectionCard(
+            title: 'Lender Wallet',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Available balance: ₹${(lender?.walletBalance ?? 0).toStringAsFixed(0)}'),
+                const SizedBox(height: 6),
+                Text('Required for disbursement: ₹${widget.loan.amount.toStringAsFixed(0)}'),
+                const SizedBox(height: 10),
+                FilledButton.tonal(
+                  onPressed: lender == null ? null : () => _addFunds(lender.uid),
+                  child: const Text('Add Funds to Wallet'),
+                ),
               ],
             ),
           ),
@@ -474,9 +641,37 @@ class LenderReturnsScreen extends StatelessWidget {
                             ),
                             title: Text('₹${loan.amount.toStringAsFixed(0)} - ${loan.borrowerName}'),
                             subtitle: Text('${loan.duration} • ${loan.status.toUpperCase()}'),
-                            trailing: isRepaid 
-                              ? const StatusBadge(label: 'Repaid', color: trustGreen)
-                              : const StatusBadge(label: 'Active', color: primaryBlue),
+                            trailing: isRepaid
+                                ? const StatusBadge(label: 'Repaid', color: trustGreen)
+                                : TextButton(
+                                    onPressed: () async {
+                                      try {
+                                        await LoanService().updateLoanStatus(
+                                          loan,
+                                          'defaulted',
+                                          lenderId: user.uid,
+                                        );
+                                        if (!context.mounted) {
+                                          return;
+                                        }
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Marked ${loan.borrowerName} as defaulted. Collateral claimed.',
+                                            ),
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        if (!context.mounted) {
+                                          return;
+                                        }
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Could not mark default: $e')),
+                                        );
+                                      }
+                                    },
+                                    child: const Text('Mark Default'),
+                                  ),
                           );
                         }).toList(),
                       ),
@@ -554,6 +749,10 @@ class LoanDetailsScreen extends StatelessWidget {
                     Text('Amount: ₹${activeLoan.amount.toStringAsFixed(0)}'),
                     const SizedBox(height: 6),
                     Text('Duration: ${activeLoan.duration}'),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Collateral: ₹${activeLoan.collateralAmount.toStringAsFixed(0)} (${(activeLoan.collateralPercent * 100).toStringAsFixed(0)}%)',
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       'TX Hash: ${activeLoan.txHash?.substring(0, 16)}...',
