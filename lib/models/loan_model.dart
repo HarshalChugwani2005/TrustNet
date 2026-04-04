@@ -9,6 +9,7 @@ class LoanModel {
   final String duration;
   final String purpose;
   final String status;
+  final double repaidAmount;
   final String? lenderId;
   final String? txHash;
   final int? blockNumber;
@@ -24,6 +25,7 @@ class LoanModel {
     required this.duration,
     required this.purpose,
     this.status = 'pending',
+    this.repaidAmount = 0,
     this.lenderId,
     this.txHash,
     this.blockNumber,
@@ -41,6 +43,7 @@ class LoanModel {
       duration: data['duration'] ?? '',
       purpose: data['purpose'] ?? '',
       status: data['status'] ?? 'pending',
+      repaidAmount: (data['repaidAmount'] ?? 0).toDouble(),
       lenderId: data['lenderId'],
       txHash: data['txHash'],
       blockNumber: data['blockNumber'],
@@ -60,6 +63,7 @@ class LoanModel {
       'duration': duration,
       'purpose': purpose,
       'status': status,
+      'repaidAmount': repaidAmount,
       'lenderId': lenderId,
       'txHash': txHash,
       'blockNumber': blockNumber,

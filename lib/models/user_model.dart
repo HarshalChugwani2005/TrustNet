@@ -11,7 +11,7 @@ class UserModel {
     required this.email,
     required this.fullName,
     required this.role,
-    this.trustScore = 74,
+    this.trustScore = 50,
     this.walletAddress,
   });
 
@@ -21,7 +21,7 @@ class UserModel {
       email: data['email'] ?? '',
       fullName: data['fullName'] ?? '',
       role: data['role'] ?? 'borrower',
-      trustScore: data['trustScore'] ?? 74,
+      trustScore: data['trustScore'] ?? 50,
       walletAddress: data['walletAddress'],
     );
   }

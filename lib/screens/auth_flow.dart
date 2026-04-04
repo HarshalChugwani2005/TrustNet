@@ -139,7 +139,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<_BoardData> _pages = const [
     _BoardData(
       icon: Icons.hub_outlined,
-      title: 'Decentralized & Trustless',
+      title: 'Decentralized & Transparent',
       subtitle:
           'No central authority. Connect directly with the community on a public ledger.',
     ),
@@ -1027,11 +1027,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                'Your data is सुरक्षित and secure',
-                style: TextStyle(color: Color(0xFF5A6A80)),
-              ),
-              const SizedBox(height: 6),
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
@@ -1311,27 +1306,8 @@ class _BorrowerProfileDetailsScreenState extends State<BorrowerProfileDetailsScr
     super.dispose();
   }
 
-  int _generateTrustScore(double income, String purpose) {
-    var score = 50;
-    if (income >= 40000) {
-      score += 18;
-    } else if (income >= 20000) {
-      score += 12;
-    } else if (income >= 10000) {
-      score += 8;
-    } else {
-      score += 4;
-    }
-
-    final normalizedPurpose = purpose.toLowerCase();
-    if (normalizedPurpose.contains('business') ||
-        normalizedPurpose.contains('education') ||
-        normalizedPurpose.contains('medical')) {
-      score += 10;
-    } else {
-      score += 6;
-    }
-    return score.clamp(45, 90);
+  int _initialTrustScore() {
+    return 50;
   }
 
   void _continue() async {
@@ -1346,7 +1322,7 @@ class _BorrowerProfileDetailsScreenState extends State<BorrowerProfileDetailsScr
       return;
     }
 
-    final trustScore = _generateTrustScore(income, purpose);
+    final trustScore = _initialTrustScore();
     
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -1390,7 +1366,7 @@ class _BorrowerProfileDetailsScreenState extends State<BorrowerProfileDetailsScr
           ),
           const SizedBox(height: 8),
           const Text(
-            'Name, income, and purpose help us generate your initial trust score.',
+              'Your trust score starts with a fixed baseline and increases primarily after successful repayments.',
             style: TextStyle(color: Color(0xFF5A6A80)),
           ),
           const SizedBox(height: 18),
@@ -1430,7 +1406,7 @@ class _BorrowerProfileDetailsScreenState extends State<BorrowerProfileDetailsScr
             onPressed: _continue,
             child: const Padding(
               padding: EdgeInsets.symmetric(vertical: 13),
-              child: Text('Generate Trust Score & Continue'),
+              child: Text('Set Baseline Score & Continue'),
             ),
           )
         ],

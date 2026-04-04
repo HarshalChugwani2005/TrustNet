@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -630,25 +632,31 @@ class RepaymentScreen extends StatefulWidget {
 
 class _RepaymentScreenState extends State<RepaymentScreen> {
   bool _isPaying = false;
+  final Map<String, double> _selectedPayments = {};
 
-  Future<void> _payLoan(LoanModel loan) async {
+  Future<void> _payLoan(LoanModel loan, double amountToPay) async {
     setState(() => _isPaying = true);
     try {
-      await LoanService().repayLoan(loan);
+      final isFullyRepaid = await LoanService().repayLoan(
+        loan,
+        paymentAmount: amountToPay,
+      );
+      _selectedPayments.remove(loan.id);
       if (!mounted) return;
       showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
           icon: const Icon(Icons.check_circle, color: trustGreen, size: 42),
           title: const Text('Payment successful'),
-          content: const Text(
-            'Your payment was recorded. +5 Trust Score added!',
+          content: Text(
+            isFullyRepaid
+                ? 'Loan closed successfully. Trust score updated with this repayment.'
+                : '₹${amountToPay.toStringAsFixed(0)} paid successfully. Trust score increased gradually based on repayment progress.',
           ),
           actions: [
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop(); // close dialog
-                Navigator.of(context).pop(); // go back to dashboard
               },
               child: const Text('Done'),
             ),
@@ -691,6 +699,18 @@ class _RepaymentScreenState extends State<RepaymentScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppSpace.x3 - 4),
             children: activeLoans.map((loan) {
+              final double repaidAmount = loan.repaidAmount.clamp(0.0, loan.amount).toDouble();
+              final double remainingAmount = (loan.amount - repaidAmount).clamp(0.0, loan.amount).toDouble();
+              final double minPayment = remainingAmount < 1 ? remainingAmount : 1.0;
+              final double selectedAmount = remainingAmount <= 0
+                  ? 0.0
+                  : (_selectedPayments[loan.id] ?? remainingAmount)
+                      .clamp(minPayment, remainingAmount)
+                      .toDouble();
+              final double progress = loan.amount <= 0
+                  ? 0.0
+                  : (repaidAmount / loan.amount).clamp(0.0, 1.0).toDouble();
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
                 child: SectionCard(
@@ -702,23 +722,51 @@ class _RepaymentScreenState extends State<RepaymentScreen> {
                         '₹${loan.amount.toStringAsFixed(0)}',
                         style: const TextStyle(fontSize: 38, fontWeight: FontWeight.w800, color: ink),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Repaid: ₹${repaidAmount.toStringAsFixed(0)} • Remaining: ₹${remainingAmount.toStringAsFixed(0)}',
+                        style: const TextStyle(color: mutedInk),
+                      ),
                       const SizedBox(height: 10),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: const LinearProgressIndicator(value: 0.0, minHeight: 9),
+                        child: LinearProgressIndicator(value: progress, minHeight: 9),
                       ),
                       const SizedBox(height: 8),
                       Text('Purpose: ${loan.purpose}', style: const TextStyle(color: mutedInk)),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
+                      if (remainingAmount > 1) ...[
+                        Text(
+                          'Pay now: ₹${selectedAmount.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Slider(
+                          value: selectedAmount,
+                          min: 1,
+                          max: remainingAmount,
+                          divisions: math.min(100, remainingAmount.round()),
+                          label: selectedAmount.toStringAsFixed(0),
+                          onChanged: _isPaying
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _selectedPayments[loan.id] = value;
+                                  });
+                                },
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           FilledButton(
-                            onPressed: _isPaying ? null : () => _payLoan(loan),
+                            onPressed: _isPaying || remainingAmount <= 0
+                                ? null
+                                : () => _payLoan(loan, selectedAmount),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
                               child: _isPaying 
                                  ? const SizedBox(width:20, height:20, child: CircularProgressIndicator(color: Colors.white, strokeWidth:2))
-                                 : const Text('Pay Now in Full'),
+                                 : Text('Pay ₹${selectedAmount.toStringAsFixed(0)}'),
                             ),
                           ),
                         ],
