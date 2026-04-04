@@ -715,6 +715,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _identifierController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
@@ -813,6 +814,7 @@ class _SignupScreenState extends State<SignupScreen> {
   void dispose() {
     _nameController.dispose();
     _identifierController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -833,6 +835,18 @@ class _SignupScreenState extends State<SignupScreen> {
     final isEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text);
     if (!isEmail) {
       return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
+      return 'Enter your phone number';
+    }
+    final digits = text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length < 10 || digits.length > 15) {
+      return 'Enter a valid phone number';
     }
     return null;
   }
@@ -877,6 +891,7 @@ class _SignupScreenState extends State<SignupScreen> {
         identifier: _identifierController.text,
         password: _passwordController.text,
         role: _role.toLowerCase(),
+        phone: _phoneController.text,
       );
 
       await _authService.sendSignupEmailVerification();
@@ -1009,6 +1024,17 @@ class _SignupScreenState extends State<SignupScreen> {
                 decoration: _inputDecoration(
                   label: 'Email Address',
                   icon: Icons.alternate_email_rounded,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                validator: _validatePhone,
+                textInputAction: TextInputAction.next,
+                decoration: _inputDecoration(
+                  label: 'Phone Number',
+                  icon: Icons.phone_outlined,
                 ),
               ),
               const SizedBox(height: 12),

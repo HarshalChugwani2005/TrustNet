@@ -134,6 +134,21 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
         throw Exception('User not logged in');
       }
 
+      final collateralPercent = _collateralPercentFromTrustScore(user.trustScore);
+      final collateralEstimate = amount * collateralPercent;
+      if (user.walletBalance < collateralEstimate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              user.walletBalance <= 0
+                  ? 'No funds available in wallet. Please add funds before requesting a loan.'
+                  : 'Insufficient wallet funds for collateral. Need ₹${collateralEstimate.toStringAsFixed(0)}.',
+            ),
+          ),
+        );
+        return;
+      }
+
       final loan = LoanModel(
         id: '',
         borrowerId: user.uid,
@@ -165,8 +180,13 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
+      final errorText = e.toString();
+      final friendlyMessage =
+          errorText.contains('Insufficient wallet balance for collateral')
+              ? 'No funds available in wallet. Please add funds before requesting a loan.'
+              : 'Failed to submit: $e';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit: $e')),
+        SnackBar(content: Text(friendlyMessage)),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -278,6 +298,17 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
 class LenderLoanRequestsScreen extends StatelessWidget {
   const LenderLoanRequestsScreen({super.key});
 
+  List<Widget> _borrowerBadges(LoanModel loan) {
+    final badges = <Widget>[const StatusBadge(label: 'Profile Verified', color: primaryBlue)];
+    if (loan.collateralLocked || loan.collateralAmount > 0) {
+      badges.add(const StatusBadge(label: 'Collateral Secured', color: warningAmber));
+    }
+    if (loan.borrowerTrustScore >= 80) {
+      badges.add(const StatusBadge(label: 'High Trust', color: trustGreen));
+    }
+    return badges;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -354,6 +385,12 @@ class LenderLoanRequestsScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _borrowerBadges(item),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
                           'Amount: ₹${item.amount.toStringAsFixed(0)}',
                           style: const TextStyle(
@@ -409,6 +446,17 @@ class LenderBorrowerDetailsScreen extends StatefulWidget {
 class _LenderBorrowerDetailsScreenState
     extends State<LenderBorrowerDetailsScreen> {
   bool _isLoading = false;
+
+  List<Widget> _borrowerBadges() {
+    final badges = <Widget>[const StatusBadge(label: 'Profile Verified', color: primaryBlue)];
+    if (widget.loan.collateralLocked || widget.loan.collateralAmount > 0) {
+      badges.add(const StatusBadge(label: 'Collateral Secured', color: warningAmber));
+    }
+    if (widget.loan.borrowerTrustScore >= 80) {
+      badges.add(const StatusBadge(label: 'High Trust', color: trustGreen));
+    }
+    return badges;
+  }
 
   Future<void> _addFunds(String userId) async {
     final controller = TextEditingController();
@@ -510,6 +558,12 @@ class _LenderBorrowerDetailsScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _borrowerBadges(),
+                ),
+                const SizedBox(height: 8),
                 Text('Requested amount: ₹${widget.loan.amount.toStringAsFixed(0)}'),
                 const SizedBox(height: 6),
                 Text(

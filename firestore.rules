@@ -19,9 +19,11 @@ service cloud.firestore {
           'trustScore',
           'trustScoreRaw',
           'trustScoreUpdatedAt',
+          'notificationsEnabled',
           'updatedAt',
           'fullName',
           'email',
+          'phone',
           'role',
           'walletAddress'
         ]);

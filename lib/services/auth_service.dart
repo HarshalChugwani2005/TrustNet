@@ -18,6 +18,16 @@ class AuthService {
     return text.contains('@') && text.contains('.');
   }
 
+  String normalizePhone(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final startsWithPlus = trimmed.startsWith('+');
+    final digitsOnly = trimmed.replaceAll(RegExp(r'[^0-9]'), '');
+    return startsWithPlus ? '+$digitsOnly' : digitsOnly;
+  }
+
   Future<UserCredential> signInWithEmailOrPhone({
     required String identifier,
     required String password,
@@ -25,9 +35,8 @@ class AuthService {
     final trimmed = identifier.trim();
     if (!isEmail(trimmed)) {
       throw FirebaseAuthException(
-        code: 'unsupported-phone-login',
-        message:
-            'Phone login is not enabled yet. Please use your email and password.',
+        code: 'invalid-email',
+        message: 'Please use your email address to login.',
       );
     }
 
@@ -53,6 +62,7 @@ class AuthService {
     required String identifier,
     required String password,
     required String role,
+    String? phone,
   }) async {
     final trimmed = identifier.trim();
     if (!isEmail(trimmed)) {
@@ -76,6 +86,7 @@ class AuthService {
         fullName: fullName,
         role: role,
         email: user.email,
+        phone: phone,
       );
     }
 
@@ -158,6 +169,7 @@ class AuthService {
     required String fullName,
     String? role,
     String? email,
+    String? phone,
   }) async {
     final payload = <String, dynamic>{
       'fullName': fullName,
@@ -169,6 +181,11 @@ class AuthService {
 
     if (role != null && role.isNotEmpty) {
       payload['role'] = role;
+    }
+
+    final normalizedPhone = normalizePhone(phone ?? '');
+    if (normalizedPhone.isNotEmpty) {
+      payload['phone'] = normalizedPhone;
     }
 
     await _firestore.collection('users').doc(uid).set(

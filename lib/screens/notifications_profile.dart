@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -134,6 +135,39 @@ class ProfileScreen extends StatelessWidget {
     return '${address.substring(0, 6)}...${address.substring(address.length - 4)}';
   }
 
+  int _countOnTimeCompletedLoans(QuerySnapshot<Map<String, dynamic>> snapshot) {
+    var count = 0;
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final status = (data['status'] ?? '').toString().toLowerCase();
+      if (status != 'repaid') {
+        continue;
+      }
+
+      final events = data['repaymentEvents'];
+      var hasLateEvent = false;
+      if (events is List) {
+        for (final rawEvent in events) {
+          if (rawEvent is! Map) {
+            continue;
+          }
+          final eventType = (rawEvent['eventType'] ?? '').toString();
+          if (eventType.startsWith('late') || eventType == 'missed_cycle') {
+            hasLateEvent = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasLateEvent) {
+        count += 1;
+      }
+    }
+
+    return count;
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
@@ -147,6 +181,7 @@ class ProfileScreen extends StatelessWidget {
     final role = user?.role ?? 'Guest';
     final trustScore = user?.trustScore ?? 74;
     final emailInfo = user?.email ?? 'Not available';
+    final phoneInfo = (user?.phone ?? '').isEmpty ? 'Not available' : user!.phone;
     final walletAddress = user?.walletAddress;
 
     return SafeArea(
@@ -245,35 +280,70 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpace.x2 - 2),
-          const SectionCard(
+          SectionCard(
             title: 'Trust & History',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TrustBadge(label: '100% Secure & Transparent'),
-                SizedBox(height: 10),
-                Text('Phone: +91 98xxxxxx76'),
-                SizedBox(height: 6),
-                Text('2 loans completed on time'),
+                const TrustBadge(label: '100% Secure & Transparent'),
+                const SizedBox(height: 10),
+                Text('Phone: $phoneInfo'),
+                const SizedBox(height: 6),
+                if (user == null)
+                  const Text('0 loans completed on time')
+                else
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('loans')
+                        .where('borrowerId', isEqualTo: user.uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data;
+                      final count = data == null ? 0 : _countOnTimeCompletedLoans(data);
+                      return Text('$count loans completed on time');
+                    },
+                  ),
               ],
             ),
           ),
           const SizedBox(height: AppSpace.x2 - 2),
-          const SectionCard(
+          SectionCard(
             title: 'Settings',
             child: Column(
               children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.notifications_active_outlined),
-                  title: Text('Notification Preferences'),
-                  subtitle: Text('Manage reminders and updates'),
-                ),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.security_outlined),
-                  title: Text('Privacy & Security'),
-                  subtitle: Text('Device and account protection'),
+                StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: user == null
+                      ? const Stream<DocumentSnapshot<Map<String, dynamic>>>.empty()
+                      : FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(user.uid)
+                          .snapshots(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data?.data();
+                    final notificationsEnabled =
+                        data?['notificationsEnabled'] is bool
+                            ? data!['notificationsEnabled'] as bool
+                            : true;
+
+                    return SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(Icons.notifications_active_outlined),
+                      title: const Text('Notification Preferences'),
+                      subtitle: const Text('Turn notifications on/off'),
+                      value: notificationsEnabled,
+                      onChanged: user == null
+                          ? null
+                          : (value) async {
+                              await FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user.uid)
+                                  .set(
+                                {'notificationsEnabled': value},
+                                SetOptions(merge: true),
+                              );
+                            },
+                    );
+                  },
                 ),
               ],
             ),

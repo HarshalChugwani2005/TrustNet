@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/loan_model.dart';
+import '../models/user_model.dart';
 import '../providers/user_provider.dart';
 import '../services/loan_service.dart';
 import '../theme/app_theme.dart';
@@ -10,6 +11,33 @@ import 'loan_screens.dart';
 
 class HomeDashboardScreen extends StatelessWidget {
   const HomeDashboardScreen({super.key});
+  
+  bool _isProfileVerified(UserModel? user) {
+    if (user == null) {
+      return false;
+    }
+    return user.fullName.trim().isNotEmpty &&
+        user.email.trim().isNotEmpty &&
+        user.role.trim().isNotEmpty;
+  }
+  
+  List<Widget> _buildUserVerificationBadges(UserModel? user) {
+    final badges = <Widget>[];
+  
+    if (_isProfileVerified(user)) {
+      badges.add(const StatusBadge(label: 'Profile Verified', color: primaryBlue));
+    }
+  
+    if ((user?.lockedBalance ?? 0) > 0) {
+      badges.add(const StatusBadge(label: 'Collateral Secured', color: warningAmber));
+    }
+  
+    if ((user?.trustScore ?? 0) >= 80) {
+      badges.add(const StatusBadge(label: 'High Trust', color: trustGreen));
+    }
+  
+    return badges;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +62,14 @@ class HomeDashboardScreen extends StatelessWidget {
               'Welcome, $borrowerName',
               style: const TextStyle(color: mutedInk, fontSize: 15),
             ),
+          if (_buildUserVerificationBadges(user).isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _buildUserVerificationBadges(user),
+            ),
+          ],
           if (borrowerName != null && borrowerName.trim().isNotEmpty)
             const SizedBox(height: AppSpace.x1 - 2),
           const Text(

@@ -16,13 +16,18 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(AppSpace.x2),
       decoration: BoxDecoration(
-        color: cardSurface,
+        color: isDark ? scheme.surfaceContainerHigh : cardSurface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        boxShadow: AppShadow.medium,
-        border: Border.all(color: border.withValues(alpha: 0.5)),
+        boxShadow: isDark ? const [] : AppShadow.medium,
+        border: Border.all(
+          color: isDark ? scheme.outline.withValues(alpha: 0.45) : border.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,7 +37,11 @@ class SectionCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
               ),
               trailing ?? const SizedBox.shrink(),
@@ -58,10 +67,12 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withValues(alpha: isDark ? 0.2 : 0.12),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
@@ -82,10 +93,12 @@ class TrustBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: softGreen,
+        color: isDark ? const Color(0xFF123828) : softGreen,
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
@@ -164,9 +177,13 @@ class TrustScoreCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
                 ),
                 const SizedBox(height: 2),
-                const Text(
+                Text(
                   'Repay on time to unlock faster approvals and better terms.',
-                  style: TextStyle(color: mutedInk),
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                        : mutedInk,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const TrustBadge(label: 'Verified User'),

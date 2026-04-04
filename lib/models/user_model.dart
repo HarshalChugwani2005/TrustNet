@@ -3,6 +3,7 @@ class UserModel {
   final String email;
   final String fullName;
   final String role;
+  final String phone;
   final int trustScore;
   final double walletBalance;
   final double lockedBalance;
@@ -13,6 +14,7 @@ class UserModel {
     required this.email,
     required this.fullName,
     required this.role,
+    this.phone = '',
     this.trustScore = 50,
     this.walletBalance = 0,
     this.lockedBalance = 0,
@@ -22,13 +24,16 @@ class UserModel {
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
     return UserModel(
       uid: documentId,
-      email: data['email'] ?? '',
-      fullName: data['fullName'] ?? '',
-      role: data['role'] ?? 'borrower',
-      trustScore: data['trustScore'] ?? 50,
+      email: (data['email'] ?? '').toString(),
+      fullName: (data['fullName'] ?? '').toString(),
+      role: (data['role'] ?? 'borrower').toString(),
+      phone: (data['phone'] ?? '').toString(),
+      trustScore: (data['trustScore'] ?? 50) is num
+          ? (data['trustScore'] as num).toInt()
+          : 50,
       walletBalance: (data['wallet_balance'] ?? data['walletBalance'] ?? 0).toDouble(),
       lockedBalance: (data['locked_balance'] ?? data['lockedBalance'] ?? 0).toDouble(),
-      walletAddress: data['walletAddress'],
+      walletAddress: data['walletAddress']?.toString(),
     );
   }
 
@@ -37,6 +42,7 @@ class UserModel {
       'email': email,
       'fullName': fullName,
       'role': role,
+      'phone': phone,
       'trustScore': trustScore,
       'wallet_balance': walletBalance,
       'locked_balance': lockedBalance,
