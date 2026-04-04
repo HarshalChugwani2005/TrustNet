@@ -102,6 +102,6 @@ TrustNet lets borrowers request funding, lenders review opportunities, and both 
 
 ## Notes
 
-- The project currently uses a hybrid model rather than a fully decentralized stack.
+- The project currently uses a fully decentralized stack.
 - Firebase handles authentication, user profiles, notifications, and trust-score persistence.
 - The blockchain layer is used for verifiable lending transactions and auditability.
