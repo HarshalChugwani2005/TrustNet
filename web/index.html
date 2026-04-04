@@ -23,14 +23,44 @@
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="trustnet">
+  <meta name="apple-mobile-web-app-title" content="TrustNet">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>trustnet</title>
+  <title>TrustNet</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    (function () {
+      const originalError = console.error.bind(console);
+      const isExpectedAuthEndpoint = (text) =>
+        text.includes('signInWithPassword') || text.includes('signUp');
+
+      const isExpectedFirebaseAuthNoise = (value) => {
+        const text = String(value || '');
+        return text.includes('identitytoolkit.googleapis.com') &&
+            isExpectedAuthEndpoint(text) &&
+            text.includes('400');
+      };
+
+      console.error = function (...args) {
+        if (args.some(isExpectedFirebaseAuthNoise)) {
+          return;
+        }
+        originalError(...args);
+      };
+
+      window.addEventListener('unhandledrejection', function (event) {
+        const text = String(event && event.reason ? event.reason : '');
+        if (text.includes('identitytoolkit.googleapis.com') &&
+            isExpectedAuthEndpoint(text) &&
+            text.includes('400')) {
+          event.preventDefault();
+        }
+      });
+    })();
+  </script>
 </head>
 <body>
   <!--

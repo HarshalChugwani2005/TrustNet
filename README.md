@@ -1,5 +1,4 @@
 <div align="center">
-
 # TrustNet
 
 Peer-to-peer lending platform built with Flutter + Firebase.
