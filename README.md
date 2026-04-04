@@ -17,24 +17,6 @@ It emphasizes trust, transparency, and accountability through:
 - 📈 A reputation-based (dynamic) credit score
 - 📒 A transparent transaction ledger
 
-**High-level flow (conceptual):**
-
-```mermaid
-flowchart LR
-	U[👤 User] --> A[🔐 Firebase Authentication]
-	A --> P[🪪 Profile Verification]
-	P --> S[📈 Dynamic Credit Score]
-
-	B[🙋 Borrower] --> R[📝 Create Loan Request]
-	L[🤝 Lender] --> V[🔎 View & Evaluate Requests]
-	V --> S
-	L --> F[💸 Fund Loan]
-	R --> F
-
-	F --> Lg[📒 Public Ledger (Firestore)]
-	Pay[💳 Repayment (Tracked)] --> Lg
-```
-
 ## ✨ Key Features
 ### 🔐 Authentication
 - 🔑 Secure login/signup using Firebase Authentication
