@@ -352,6 +352,21 @@ class _AuthScreenState extends State<AuthScreen> {
         password: _passwordController.text,
       );
       if (!mounted) return;
+
+      final isVerified = cred.user?.emailVerified ?? false;
+      if (!isVerified) {
+        await _authService.sendSignupEmailVerification();
+        await FirebaseAuth.instance.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please verify your email first. We sent a verification code/link to your inbox.',
+            ),
+          ),
+        );
+        return;
+      }
       
       try {
         final doc = await FirebaseFirestore.instance
@@ -709,6 +724,91 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _isLoading = false;
   String _role = 'Borrower';
 
+  Future<bool> _verifyEmailOtpDialog() async {
+    var isChecking = false;
+    var isResending = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Verify Email OTP'),
+              content: const Text(
+                'We sent a verification email OTP/link to your inbox. Verify it, then tap "I\'ve Verified".',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isResending
+                      ? null
+                      : () async {
+                          setDialogState(() => isResending = true);
+                          try {
+                            await _authService.sendSignupEmailVerification();
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Verification email sent again.'),
+                              ),
+                            );
+                          } on FirebaseAuthException catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(content: Text(_readableAuthError(e))),
+                            );
+                          } finally {
+                            if (context.mounted) {
+                              setDialogState(() => isResending = false);
+                            }
+                          }
+                        },
+                  child: isResending
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Resend OTP'),
+                ),
+                FilledButton(
+                  onPressed: isChecking
+                      ? null
+                      : () async {
+                          setDialogState(() => isChecking = true);
+                          try {
+                            final verified =
+                                await _authService.refreshAndCheckEmailVerified();
+                            if (!context.mounted) return;
+                            Navigator.of(dialogContext).pop(verified);
+                          } finally {
+                            if (context.mounted) {
+                              setDialogState(() => isChecking = false);
+                            }
+                          }
+                        },
+                  child: isChecking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('I\'ve Verified'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return result ?? false;
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -778,9 +878,23 @@ class _SignupScreenState extends State<SignupScreen> {
         password: _passwordController.text,
         role: _role.toLowerCase(),
       );
+
+      await _authService.sendSignupEmailVerification();
       if (!mounted) return;
+
+      final verified = await _verifyEmailOtpDialog();
+      if (!mounted) return;
+      if (!verified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email not verified yet. Please complete verification.'),
+          ),
+        );
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account created successfully as $_role.')),
+        SnackBar(content: Text('Email verified. Account created successfully as $_role.')),
       );
       _continueWithSelectedRole();
     } on FirebaseAuthException catch (e) {

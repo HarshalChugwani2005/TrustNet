@@ -133,6 +133,26 @@ class AuthService {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
+  Future<void> sendSignupEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No authenticated user found for verification.',
+      );
+    }
+    await user.sendEmailVerification();
+  }
+
+  Future<bool> refreshAndCheckEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+    await user.reload();
+    return _auth.currentUser?.emailVerified ?? false;
+  }
+
   Future<void> _upsertUserProfile({
     required String uid,
     required String fullName,
