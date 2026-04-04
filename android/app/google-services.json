@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "407806435442",
+    "project_id": "trustnet-13147",
+    "storage_bucket": "trustnet-13147.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:407806435442:android:16b72c4348ed35f2c7e2eb",
+        "android_client_info": {
+          "package_name": "com.example.trustnet"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNEC5uidQwPShWa7jfvSTuaeCPMt18P5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
