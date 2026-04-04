@@ -311,7 +311,11 @@ class _LenderBorrowerDetailsScreenState
     setState(() => _isLoading = true);
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final lenderId = status == 'approved' ? userProvider.currentUser?.uid : null;
+      final lenderId = userProvider.currentUser?.uid;
+
+      if (lenderId == null || lenderId.isEmpty) {
+        throw StateError('Unable to determine the current lender.');
+      }
       
       await LoanService().updateLoanStatus(
         widget.loan, 
