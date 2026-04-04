@@ -1241,7 +1241,7 @@ class RoleSelectionScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'How do you want to interact with the trustless protocol?',
+              'How do you want to interact with the decentralized protocol?',
               style: TextStyle(fontSize: 16, color: mutedInk),
             ),
             const SizedBox(height: 12),
