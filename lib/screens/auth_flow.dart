@@ -139,7 +139,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final List<_BoardData> _pages = const [
     _BoardData(
       icon: Icons.hub_outlined,
-      title: 'Decentralized & Trustless',
+      title: 'Decentralized & Transparent',
       subtitle:
           'No central authority. Connect directly with the community on a public ledger.',
     ),
@@ -1246,7 +1246,7 @@ class RoleSelectionScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'How do you want to interact with the trustless protocol?',
+              'How do you want to interact with the decentralized protocol?',
               style: TextStyle(fontSize: 16, color: mutedInk),
             ),
             const SizedBox(height: 12),
