@@ -19,4 +19,34 @@ class VirtualWalletService {
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
+
+  Future<void> withdrawFunds({
+    required String userId,
+    required double amount,
+  }) async {
+    if (amount <= 0) {
+      throw Exception('Amount should be greater than zero.');
+    }
+
+    final userRef = _firestore.collection('users').doc(userId);
+
+    await _firestore.runTransaction((transaction) async {
+      final userSnap = await transaction.get(userRef);
+      final data = userSnap.data() ?? <String, dynamic>{};
+      final currentBalance = (data['wallet_balance'] ?? 0).toDouble();
+
+      if (currentBalance < amount) {
+        throw Exception('insufficient wallet balance');
+      }
+
+      transaction.set(
+        userRef,
+        {
+          'wallet_balance': currentBalance - amount,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+    });
+  }
 }

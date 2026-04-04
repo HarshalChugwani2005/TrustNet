@@ -50,6 +50,37 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
     return 0.25;
   }
 
+  static const double _baseInterestRate = 0.05;
+
+  double _interestRateFromTrustScore(int trustScore) {
+    double adjustment;
+    if (trustScore >= 80) {
+      adjustment = -0.02;
+    } else if (trustScore >= 60) {
+      adjustment = -0.01;
+    } else if (trustScore >= 40) {
+      adjustment = 0.0;
+    } else {
+      adjustment = 0.02;
+    }
+    return (_baseInterestRate + adjustment).clamp(0.02, 0.20);
+  }
+
+  double _durationInYears(int value, String unit) {
+    final safeValue = value <= 0 ? 1 : value;
+    if (unit == 'day') {
+      return safeValue / 365;
+    }
+    if (unit == 'year') {
+      return safeValue.toDouble();
+    }
+    return safeValue / 12;
+  }
+
+  double _round2(double value) {
+    return (value * 100).roundToDouble() / 100;
+  }
+
   Future<void> _addFunds(String userId) async {
     final controller = TextEditingController();
     final amount = await showDialog<double>(
@@ -153,6 +184,10 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
 
       final collateralPercent = _collateralPercentFromTrustScore(user.trustScore);
       final collateralEstimate = amount * collateralPercent;
+      final interestRate = _interestRateFromTrustScore(user.trustScore);
+      final durationYears = _durationInYears(durationValue, _durationUnit);
+      final interestAmount = _round2(amount * interestRate * durationYears);
+      final totalRepayable = _round2(amount + interestAmount);
       if (user.walletBalance < collateralEstimate) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -174,6 +209,9 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
         amount: amount,
         duration: duration,
         purpose: purpose,
+        interestRate: interestRate,
+        interestAmount: interestAmount,
+        totalRepayable: totalRepayable,
       );
 
       await LoanService().requestLoan(loan);
@@ -214,8 +252,17 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
   Widget build(BuildContext context) {
     final user = Provider.of<UserProvider>(context).currentUser;
     final amountPreview = double.tryParse(_amountController.text.trim()) ?? 0;
+    final durationValuePreview =
+      int.tryParse(_durationValueController.text.trim()) ?? 1;
     final collateralPercent = _collateralPercentFromTrustScore(widget.trustScore);
     final collateralPreview = amountPreview <= 0 ? 0 : amountPreview * collateralPercent;
+    final interestRate = _interestRateFromTrustScore(widget.trustScore);
+    final durationYears = _durationInYears(durationValuePreview, _durationUnit);
+    final interestPreview = amountPreview <= 0
+      ? 0
+      : _round2(amountPreview * interestRate * durationYears);
+    final totalRepayablePreview =
+      amountPreview <= 0 ? 0 : _round2(amountPreview + interestPreview);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Request Loan')),
@@ -325,6 +372,30 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
               hintText: 'Describe why you need this loan',
               helperText: 'Short and specific reasons are trusted faster',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'Repayment Summary',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Principal: ₹${amountPreview.toStringAsFixed(0)}'),
+                const SizedBox(height: 4),
+                Text('Base interest: ${(_baseInterestRate * 100).toStringAsFixed(0)}% p.a.'),
+                const SizedBox(height: 4),
+                Text('Trust-adjusted rate: ${(interestRate * 100).toStringAsFixed(0)}% p.a.'),
+                const SizedBox(height: 4),
+                Text(
+                  'Interest for $_selectedDurationText: ₹${interestPreview.toStringAsFixed(0)}',
+                  style: const TextStyle(color: mutedInk),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Total payable: ₹${totalRepayablePreview.toStringAsFixed(0)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpace.x2),
@@ -448,6 +519,16 @@ class LenderLoanRequestsScreen extends StatelessWidget {
                           'Amount: ₹${item.amount.toStringAsFixed(0)}',
                           style: const TextStyle(
                               fontWeight: FontWeight.w700, color: ink),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Interest: ₹${item.interestAmount.toStringAsFixed(0)} at ${(item.interestRate * 100).toStringAsFixed(0)}% p.a.',
+                          style: const TextStyle(color: mutedInk),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Total payable: ₹${item.totalRepayable.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -620,6 +701,20 @@ class _LenderBorrowerDetailsScreenState
                 Text('Requested amount: ₹${widget.loan.amount.toStringAsFixed(0)}'),
                 const SizedBox(height: 6),
                 Text(
+                  'Base interest: 5% p.a. • Applied rate: ${(widget.loan.interestRate * 100).toStringAsFixed(0)}% p.a.',
+                  style: const TextStyle(color: mutedInk),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Interest for ${widget.loan.duration}: ₹${widget.loan.interestAmount.toStringAsFixed(0)}',
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Total borrower payable: ₹${widget.loan.totalRepayable.toStringAsFixed(0)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
                   'Collateral locked: ₹${widget.loan.collateralAmount.toStringAsFixed(0)} (${(widget.loan.collateralPercent * 100).toStringAsFixed(0)}%)',
                 ),
                 const SizedBox(height: 6),
@@ -698,10 +793,12 @@ class LenderReturnsScreen extends StatelessWidget {
           final repaidLoans = loans.where((l) => l.status == 'repaid').toList();
           
           final totalInvested = activeLoans.fold<double>(0, (sum, loan) => sum + loan.amount);
-          final totalRepaid = repaidLoans.fold<double>(0, (sum, loan) => sum + loan.amount);
-
-          // Simplified interest calculation (5% interest)
-          final actualReturns = totalRepaid * 1.05;
+            final totalPrincipalRepaid =
+              repaidLoans.fold<double>(0, (sum, loan) => sum + loan.amount);
+            final totalReturnsReceived =
+              repaidLoans.fold<double>(0, (sum, loan) => sum + loan.repaidAmount);
+            final totalInterestEarned =
+              (totalReturnsReceived - totalPrincipalRepaid).clamp(0.0, double.infinity);
 
           return ListView(
             padding: const EdgeInsets.all(AppSpace.x3 - 4),
@@ -713,9 +810,11 @@ class LenderReturnsScreen extends StatelessWidget {
                   children: [
                     Text('Active Investments: ₹${totalInvested.toStringAsFixed(0)}'),
                     const SizedBox(height: 6),
-                    Text('Completed (Repaid): ₹${totalRepaid.toStringAsFixed(0)}'),
+                    Text('Completed principal: ₹${totalPrincipalRepaid.toStringAsFixed(0)}'),
                     const SizedBox(height: 6),
-                    Text('Total Returns Received: ₹${actualReturns.toStringAsFixed(0)}'),
+                    Text('Interest earned: ₹${totalInterestEarned.toStringAsFixed(0)}'),
+                    const SizedBox(height: 6),
+                    Text('Total Returns Received: ₹${totalReturnsReceived.toStringAsFixed(0)}'),
                     const SizedBox(height: 10),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
@@ -747,7 +846,9 @@ class LenderReturnsScreen extends StatelessWidget {
                               color: isRepaid ? trustGreen : primaryBlue,
                             ),
                             title: Text('₹${loan.amount.toStringAsFixed(0)} - ${loan.borrowerName}'),
-                            subtitle: Text('${loan.duration} • ${loan.status.toUpperCase()}'),
+                            subtitle: Text(
+                              '${loan.duration} • ${loan.status.toUpperCase()} • Payable ₹${loan.totalRepayable.toStringAsFixed(0)}',
+                            ),
                             trailing: isRepaid
                                 ? const StatusBadge(label: 'Repaid', color: trustGreen)
                                 : TextButton(
@@ -833,7 +934,10 @@ class LoanDetailsScreen extends StatelessWidget {
           final durationMatch = RegExp(r'\d+').firstMatch(activeLoan.duration);
           final durationMonths = durationMatch != null ? int.parse(durationMatch.group(0)!) : 4;
           
-          final emiAmount = activeLoan.amount / durationMonths;
+            final totalPayable = activeLoan.totalRepayable > 0
+              ? activeLoan.totalRepayable
+              : activeLoan.amount;
+            final emiAmount = totalPayable / durationMonths;
           final isRepaid = activeLoan.status == 'repaid';
           
           // Generate realistic dates scaling into the future
@@ -854,6 +958,15 @@ class LoanDetailsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Amount: ₹${activeLoan.amount.toStringAsFixed(0)}'),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Interest: ₹${activeLoan.interestAmount.toStringAsFixed(0)} at ${(activeLoan.interestRate * 100).toStringAsFixed(0)}% p.a.',
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Total payable: ₹${totalPayable.toStringAsFixed(0)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                     const SizedBox(height: 6),
                     Text('Duration: ${activeLoan.duration}'),
                     const SizedBox(height: 6),
@@ -1009,17 +1122,21 @@ class _RepaymentScreenState extends State<RepaymentScreen> {
           return ListView(
             padding: const EdgeInsets.all(AppSpace.x3 - 4),
             children: activeLoans.map((loan) {
-              final double repaidAmount = loan.repaidAmount.clamp(0.0, loan.amount).toDouble();
-              final double remainingAmount = (loan.amount - repaidAmount).clamp(0.0, loan.amount).toDouble();
+              final double payableAmount =
+                (loan.totalRepayable > 0 ? loan.totalRepayable : loan.amount).toDouble();
+              final double repaidAmount = loan.repaidAmount.clamp(0.0, payableAmount).toDouble();
+              final double remainingAmount = (payableAmount - repaidAmount)
+                .clamp(0.0, payableAmount)
+                .toDouble();
               final double minPayment = remainingAmount < 1 ? remainingAmount : 1.0;
               final double selectedAmount = remainingAmount <= 0
                   ? 0.0
                   : (_selectedPayments[loan.id] ?? remainingAmount)
                       .clamp(minPayment, remainingAmount)
                       .toDouble();
-              final double progress = loan.amount <= 0
+              final double progress = payableAmount <= 0
                   ? 0.0
-                  : (repaidAmount / loan.amount).clamp(0.0, 1.0).toDouble();
+                : (repaidAmount / payableAmount).clamp(0.0, 1.0).toDouble();
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 14),
@@ -1029,8 +1146,13 @@ class _RepaymentScreenState extends State<RepaymentScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '₹${loan.amount.toStringAsFixed(0)}',
+                        '₹${payableAmount.toStringAsFixed(0)}',
                         style: const TextStyle(fontSize: 38, fontWeight: FontWeight.w800, color: ink),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Principal: ₹${loan.amount.toStringAsFixed(0)} • Interest: ₹${loan.interestAmount.toStringAsFixed(0)}',
+                        style: const TextStyle(color: mutedInk),
                       ),
                       const SizedBox(height: 4),
                       Text(

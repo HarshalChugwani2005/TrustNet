@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import 'home_dashboard.dart';
 import 'notifications_profile.dart';
 import 'ledger_explorer.dart';
@@ -16,6 +17,7 @@ class _DashboardShellState extends State<DashboardShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final pages = [
       const HomeDashboardScreen(),
       const LedgerExplorerScreen(),
@@ -37,17 +39,17 @@ class _DashboardShellState extends State<DashboardShell> {
         height: 72,
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.home_outlined), label: l10n.tr('home')),
           NavigationDestination(
-            icon: Icon(Icons.hub_outlined),
-            label: 'Ledger',
+            icon: const Icon(Icons.hub_outlined),
+            label: l10n.tr('ledger'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.notifications_none_rounded),
-            label: 'Notifications',
+            icon: const Icon(Icons.notifications_none_rounded),
+            label: l10n.tr('notifications'),
           ),
-          NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+          NavigationDestination(icon: const Icon(Icons.person_outline), label: l10n.tr('profile')),
         ],
       ),
     );

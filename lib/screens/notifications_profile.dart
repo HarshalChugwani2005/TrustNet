@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
+import '../l10n/app_localizations.dart';
 import '../models/notification_model.dart';
 import '../providers/user_provider.dart';
 import '../services/notification_service.dart';
@@ -16,25 +17,26 @@ class NotificationsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
 
     if (user == null) {
-      return const Center(child: Text('Please log in.'));
+      return Center(child: Text(l10n.tr('please_log_in')));
     }
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(AppSpace.x2 + 2),
         children: [
-          const Text(
-            'Notifications',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+          Text(
+            l10n.tr('notifications_title'),
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Stay updated with approvals, reminders, and security alerts.',
-            style: TextStyle(color: mutedInk),
+          Text(
+            l10n.tr('notifications_subtitle'),
+            style: const TextStyle(color: mutedInk),
           ),
           const SizedBox(height: AppSpace.x2),
           StreamBuilder<List<NotificationModel>>(
@@ -47,10 +49,10 @@ class NotificationsScreen extends StatelessWidget {
               final notifications = snapshot.data ?? [];
 
               if (notifications.isEmpty) {
-                return const Padding(
+                return Padding(
                   padding: EdgeInsets.only(top: 20),
                   child: Center(
-                    child: Text('You have no notifications right now.', style: TextStyle(color: mutedInk)),
+                    child: Text(l10n.tr('no_notifications'), style: const TextStyle(color: mutedInk)),
                   ),
                 );
               }
@@ -170,6 +172,7 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final userProvider = context.watch<UserProvider>();
     final user = userProvider.currentUser;
 
@@ -177,11 +180,11 @@ class ProfileScreen extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final name = user?.fullName ?? 'User Name';
-    final role = user?.role ?? 'Guest';
+    final name = user?.fullName ?? l10n.tr('user_name');
+    final role = user?.role ?? l10n.tr('guest');
     final trustScore = user?.trustScore ?? 74;
-    final emailInfo = user?.email ?? 'Not available';
-    final phoneInfo = (user?.phone ?? '').isEmpty ? 'Not available' : user!.phone;
+    final emailInfo = user?.email ?? l10n.tr('not_available');
+    final phoneInfo = (user?.phone ?? '').isEmpty ? l10n.tr('not_available') : user!.phone;
     final walletAddress = user?.walletAddress;
 
     return SafeArea(
@@ -205,18 +208,18 @@ class ProfileScreen extends StatelessWidget {
                       style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 4),
-                    const Text('Verified User', style: TextStyle(color: mutedInk)),
+                    Text(l10n.tr('verified_user'), style: const TextStyle(color: mutedInk)),
                   ],
                 ),
               ),
-              const TrustBadge(label: 'Low Risk'),
+              TrustBadge(label: l10n.tr('low_risk')),
             ],
           ),
           const SizedBox(height: AppSpace.x2),
           TrustScoreCard(score: trustScore),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: 'Account',
+            title: l10n.tr('account'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -224,7 +227,7 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     const Icon(Icons.email_outlined, size: 18, color: primaryBlue),
                     const SizedBox(width: 8),
-                    Text('Email: $emailInfo'),
+                    Text('${l10n.tr('email')}: $emailInfo'),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -233,7 +236,7 @@ class ProfileScreen extends StatelessWidget {
                     const Icon(Icons.switch_account_outlined,
                         size: 18, color: primaryBlue),
                     const SizedBox(width: 8),
-                    Text('Role: ${role.toUpperCase()}'),
+                    Text('${l10n.tr('role')}: ${role.toUpperCase()}'),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -247,11 +250,11 @@ class ProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Wallet Address'),
+                          Text(l10n.tr('wallet_address')),
                           const SizedBox(height: 4),
                           Text(
                             walletAddress == null
-                                ? 'Wallet not linked yet'
+                                ? l10n.tr('wallet_not_linked')
                                 : _shortWalletAddress(walletAddress),
                             style: TextStyle(
                               color: walletAddress == null ? mutedInk : ink,
@@ -265,11 +268,11 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     if (walletAddress != null)
                       IconButton(
-                        tooltip: 'Copy wallet address',
+                        tooltip: l10n.tr('copy_wallet_address'),
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: walletAddress));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Wallet address copied')),
+                            SnackBar(content: Text(l10n.tr('wallet_copied'))),
                           );
                         },
                         icon: const Icon(Icons.copy_rounded, size: 18),
@@ -281,16 +284,16 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: 'Trust & History',
+            title: l10n.tr('trust_history'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const TrustBadge(label: '100% Secure & Transparent'),
+                TrustBadge(label: l10n.tr('secure_transparent')),
                 const SizedBox(height: 10),
-                Text('Phone: $phoneInfo'),
+                Text('${l10n.tr('phone')}: $phoneInfo'),
                 const SizedBox(height: 6),
                 if (user == null)
-                  const Text('0 loans completed on time')
+                  Text('0 ${l10n.tr('loans_completed_on_time')}')
                 else
                   StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                     stream: FirebaseFirestore.instance
@@ -300,7 +303,7 @@ class ProfileScreen extends StatelessWidget {
                     builder: (context, snapshot) {
                       final data = snapshot.data;
                       final count = data == null ? 0 : _countOnTimeCompletedLoans(data);
-                      return Text('$count loans completed on time');
+                      return Text('$count ${l10n.tr('loans_completed_on_time')}');
                     },
                   ),
               ],
@@ -308,7 +311,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: 'Settings',
+            title: l10n.tr('settings'),
             child: Column(
               children: [
                 StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -328,8 +331,8 @@ class ProfileScreen extends StatelessWidget {
                     return SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       secondary: const Icon(Icons.notifications_active_outlined),
-                      title: const Text('Notification Preferences'),
-                      subtitle: const Text('Turn notifications on/off'),
+                      title: Text(l10n.tr('notification_preferences')),
+                      subtitle: Text(l10n.tr('toggle_notifications')),
                       value: notificationsEnabled,
                       onChanged: user == null
                           ? null
@@ -356,7 +359,7 @@ class ProfileScreen extends StatelessWidget {
               Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
             },
             icon: const Icon(Icons.logout),
-            label: const Text('Logout'),
+            label: Text(l10n.tr('logout')),
           )
         ],
       ),

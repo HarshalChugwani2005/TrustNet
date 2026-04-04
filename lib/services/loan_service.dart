@@ -16,6 +16,7 @@ class LoanService {
   static const int _minTrustScore = 0;
   static const int _maxTrustScore = 100;
   static const double _defaultPenaltyPoints = 25.0;
+  static const double _baseInterestRate = 0.05;
 
   double _collateralPercentFromTrustScore(int trustScore) {
     if (trustScore >= 80) {
@@ -52,6 +53,46 @@ class LoanService {
     final match = RegExp(r'\d+').firstMatch(duration);
     final months = match == null ? 1 : int.tryParse(match.group(0) ?? '1') ?? 1;
     return months <= 0 ? 1 : months;
+  }
+
+  double _durationInYears(String duration) {
+    final valueMatch = RegExp(r'\d+').firstMatch(duration);
+    final value = valueMatch == null ? 1 : int.tryParse(valueMatch.group(0) ?? '1') ?? 1;
+    final safeValue = value <= 0 ? 1 : value;
+    final normalized = duration.toLowerCase();
+
+    if (normalized.contains('day')) {
+      return safeValue / 365;
+    }
+    if (normalized.contains('year')) {
+      return safeValue.toDouble();
+    }
+    return safeValue / 12;
+  }
+
+  double _interestRateFromTrustScore(int trustScore) {
+    double adjustment;
+    if (trustScore >= 80) {
+      adjustment = -0.02;
+    } else if (trustScore >= 60) {
+      adjustment = -0.01;
+    } else if (trustScore >= 40) {
+      adjustment = 0.0;
+    } else {
+      adjustment = 0.02;
+    }
+
+    return (_baseInterestRate + adjustment).clamp(0.02, 0.20);
+  }
+
+  double calculateInterestAmount({
+    required double amount,
+    required String duration,
+    required int trustScore,
+  }) {
+    final rate = _interestRateFromTrustScore(trustScore);
+    final years = _durationInYears(duration);
+    return _round2(amount * rate * years);
   }
 
   int _calculateTrustScoreFromRepaymentHistory({
@@ -113,6 +154,13 @@ class LoanService {
     int borrowerTrustScore = loan.borrowerTrustScore;
     var collateralPercent = _collateralPercentFromTrustScore(borrowerTrustScore);
     var collateralAmount = _round2(loan.amount * collateralPercent);
+    var interestRate = _interestRateFromTrustScore(borrowerTrustScore);
+    var interestAmount = calculateInterestAmount(
+      amount: loan.amount,
+      duration: loan.duration,
+      trustScore: borrowerTrustScore,
+    );
+    var totalRepayable = _round2(loan.amount + interestAmount);
 
     await _firestore.runTransaction((transaction) async {
       final borrowerSnap = await transaction.get(borrowerRef);
@@ -122,6 +170,13 @@ class LoanService {
           (borrowerData['trustScore'] as num?)?.toInt() ?? borrowerTrustScore;
       collateralPercent = _collateralPercentFromTrustScore(borrowerTrustScore);
       collateralAmount = _round2(loan.amount * collateralPercent);
+        interestRate = _interestRateFromTrustScore(borrowerTrustScore);
+        interestAmount = calculateInterestAmount(
+          amount: loan.amount,
+          duration: loan.duration,
+          trustScore: borrowerTrustScore,
+        );
+        totalRepayable = _round2(loan.amount + interestAmount);
 
       if (collateralAmount > loan.amount) {
         throw Exception('Collateral cannot be greater than requested loan amount.');
@@ -177,6 +232,10 @@ class LoanService {
       duration: loan.duration,
       purpose: loan.purpose,
       status: 'pending',
+      interestRate: interestRate,
+      interestAmount: interestAmount,
+      totalRepayable: totalRepayable,
+      latePenaltyApplied: false,
       collateralAmount: collateralAmount,
       collateralPercent: collateralPercent,
       collateralLocked: true,
@@ -436,20 +495,17 @@ class LoanService {
     final latestData = latestSnapshot.data() ?? <String, dynamic>{};
 
     final loanAmount = (latestData['amount'] ?? loan.amount).toDouble();
+    final repaymentTargetRaw =
+        (latestData['totalRepayable'] ?? loan.totalRepayable) as num?;
+    final repaymentTarget =
+        (repaymentTargetRaw?.toDouble() ?? loanAmount).clamp(0.0, double.infinity);
     final alreadyRepaid = ((latestData['repaidAmount'] ?? loan.repaidAmount) as num)
         .toDouble()
-        .clamp(0.0, loanAmount);
-    final remainingAmount = (loanAmount - alreadyRepaid).clamp(0.0, loanAmount);
-    if (paymentAmount <= 0 || paymentAmount > remainingAmount) {
-      throw Exception('Invalid repayment amount selected.');
-    }
-
-    final nextRepaidAmount = (alreadyRepaid + paymentAmount).clamp(0.0, loanAmount);
-    final isFullyRepaid = nextRepaidAmount >= (loanAmount - 0.01);
+        .clamp(0.0, repaymentTarget);
 
     final durationText = (latestData['duration'] ?? loan.duration).toString();
     final durationMonths = _extractDurationMonths(durationText);
-    final duePerCycle = loanAmount / durationMonths;
+    final duePerCycle = repaymentTarget / durationMonths;
 
     final now = DateTime.now();
     final nextDueRaw = latestData['nextDueAt'];
@@ -457,6 +513,14 @@ class LoanService {
         ? nextDueRaw.toDate()
         : now.add(const Duration(days: 30));
     final daysLate = now.difference(nextDueAt).inDays;
+
+    final remainingAmount = (repaymentTarget - alreadyRepaid).clamp(0.0, repaymentTarget);
+    if (paymentAmount <= 0 || paymentAmount > remainingAmount) {
+      throw Exception('Invalid repayment amount selected.');
+    }
+
+    final nextRepaidAmount = (alreadyRepaid + paymentAmount).clamp(0.0, repaymentTarget);
+    final isFullyRepaid = nextRepaidAmount >= (repaymentTarget - 0.01);
 
     final coverageRatio = (paymentAmount / duePerCycle).clamp(0.0, 1.0);
     final onTimeInstallment = daysLate <= 0 && paymentAmount >= duePerCycle;
@@ -629,8 +693,8 @@ class LoanService {
         targetUserId: lenderId,
         title: isFullyRepaid ? 'Loan Fully Repaid' : 'Partial Repayment Received',
         message: isFullyRepaid
-            ? 'The loan of ₹${loanAmount.toStringAsFixed(0)} to ${loan.borrowerName} was fully repaid.'
-            : '${loan.borrowerName} repaid ₹${paymentAmount.toStringAsFixed(0)}. Remaining balance: ₹${(loanAmount - nextRepaidAmount).toStringAsFixed(0)}.',
+            ? 'The loan of ₹${loanAmount.toStringAsFixed(0)} (total payable ₹${repaymentTarget.toStringAsFixed(0)}) to ${loan.borrowerName} was fully repaid.'
+            : '${loan.borrowerName} repaid ₹${paymentAmount.toStringAsFixed(0)}. Remaining balance: ₹${(repaymentTarget - nextRepaidAmount).toStringAsFixed(0)}.',
       );
     }
 

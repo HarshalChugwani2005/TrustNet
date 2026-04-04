@@ -9,6 +9,10 @@ class LoanModel {
   final String duration;
   final String purpose;
   final String status;
+  final double interestRate;
+  final double interestAmount;
+  final double totalRepayable;
+  final bool latePenaltyApplied;
   final double repaidAmount;
   final double collateralAmount;
   final double collateralPercent;
@@ -29,6 +33,10 @@ class LoanModel {
     required this.duration,
     required this.purpose,
     this.status = 'pending',
+    this.interestRate = 0,
+    this.interestAmount = 0,
+    this.totalRepayable = 0,
+    this.latePenaltyApplied = false,
     this.repaidAmount = 0,
     this.collateralAmount = 0,
     this.collateralPercent = 0,
@@ -51,6 +59,14 @@ class LoanModel {
       duration: data['duration'] ?? '',
       purpose: data['purpose'] ?? '',
       status: data['status'] ?? 'pending',
+        interestRate: (data['interestRate'] ?? 0).toDouble(),
+        interestAmount: (data['interestAmount'] ?? 0).toDouble(),
+        totalRepayable: ((data['totalRepayable'] ??
+              ((data['amount'] ?? 0).toDouble() +
+                (data['interestAmount'] ?? 0).toDouble()))
+            as num)
+          .toDouble(),
+          latePenaltyApplied: data['latePenaltyApplied'] ?? false,
       repaidAmount: (data['repaidAmount'] ?? 0).toDouble(),
       collateralAmount: (data['collateralAmount'] ?? 0).toDouble(),
       collateralPercent: (data['collateralPercent'] ?? 0).toDouble(),
@@ -75,6 +91,10 @@ class LoanModel {
       'duration': duration,
       'purpose': purpose,
       'status': status,
+      'interestRate': interestRate,
+      'interestAmount': interestAmount,
+      'totalRepayable': totalRepayable > 0 ? totalRepayable : amount + interestAmount,
+      'latePenaltyApplied': latePenaltyApplied,
       'repaidAmount': repaidAmount,
       'collateralAmount': collateralAmount,
       'collateralPercent': collateralPercent,

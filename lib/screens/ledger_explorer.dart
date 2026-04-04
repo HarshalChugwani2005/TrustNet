@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/loan_model.dart';
 import '../services/loan_service.dart';
 import '../utils/external_link.dart';
@@ -16,24 +17,25 @@ class LedgerExplorerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(AppSpace.x3 - 4),
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.hub_outlined, color: primaryBlue, size: 28),
-              SizedBox(width: 10),
+              const Icon(Icons.hub_outlined, color: primaryBlue, size: 28),
+              const SizedBox(width: 10),
               Text(
-                'Global Ledger',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+                l10n.tr('global_ledger'),
+                style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Immutable, transparent, and decentralized P2P records.',
-            style: TextStyle(color: mutedInk),
+          Text(
+            l10n.tr('ledger_subtitle'),
+            style: const TextStyle(color: mutedInk),
           ),
           const SizedBox(height: AppSpace.x2),
           StreamBuilder<List<LoanModel>>(
@@ -45,10 +47,10 @@ class LedgerExplorerScreen extends StatelessWidget {
 
               final txs = snapshot.data ?? [];
               if (txs.isEmpty) {
-                return const Center(
+                return Center(
                   child: Padding(
-                    padding: EdgeInsets.only(top: 40),
-                    child: Text('No transactions found on the ledger.'),
+                    padding: const EdgeInsets.only(top: 40),
+                    child: Text(l10n.tr('no_ledger_tx')),
                   ),
                 );
               }
@@ -64,6 +66,7 @@ class LedgerExplorerScreen extends StatelessWidget {
   }
 
   Widget _buildTxCard(BuildContext context, LoanModel tx) {
+    final l10n = context.l10n;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -79,7 +82,7 @@ class LedgerExplorerScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _infoLabel(context, 'TRANSACTION HASH', tx.txHash ?? '0xPending...'),
+              _infoLabel(context, l10n.tr('transaction_hash'), tx.txHash ?? '0xPending...'),
               StatusBadge(
                 label: tx.status.toUpperCase(),
                 color: tx.status == 'approved' ? trustGreen : (tx.status == 'repaid' ? primaryBlue : warningAmber),
@@ -89,11 +92,11 @@ class LedgerExplorerScreen extends StatelessWidget {
           const Divider(height: 24),
           Row(
             children: [
-              _infoBlock('BLOCK', '#${tx.blockNumber ?? '???'}'),
+              _infoBlock(l10n.tr('block'), '#${tx.blockNumber ?? '???'}'),
               const SizedBox(width: 24),
-              _infoBlock('AMOUNT', '₹${tx.amount.toStringAsFixed(0)}'),
+              _infoBlock(l10n.tr('amount'), '₹${tx.amount.toStringAsFixed(0)}'),
               const SizedBox(width: 24),
-              _infoBlock('TRUST SCORE', '${tx.borrowerTrustScore}'),
+              _infoBlock(l10n.tr('trust_score'), '${tx.borrowerTrustScore}'),
             ],
           ),
           const SizedBox(height: 16),
@@ -102,14 +105,14 @@ class LedgerExplorerScreen extends StatelessWidget {
               const Icon(Icons.person_pin_circle_outlined, size: 14, color: mutedInk),
               const SizedBox(width: 4),
               Text(
-                'Borrower: ${tx.borrowerName}',
+                '${l10n.tr('borrower')}: ${tx.borrowerName}',
                 style: const TextStyle(fontSize: 12, color: mutedInk),
               ),
               const Spacer(),
               const Icon(Icons.history_toggle_off, size: 14, color: mutedInk),
               const SizedBox(width: 4),
               Text(
-                tx.createdAt != null ? '${tx.createdAt!.day}/${tx.createdAt!.month}' : 'Pending',
+                tx.createdAt != null ? '${tx.createdAt!.day}/${tx.createdAt!.month}' : l10n.tr('pending'),
                 style: const TextStyle(fontSize: 12, color: mutedInk),
               ),
             ],

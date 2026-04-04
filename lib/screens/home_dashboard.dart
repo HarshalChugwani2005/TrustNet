@@ -1,16 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/loan_model.dart';
 import '../models/user_model.dart';
 import '../providers/user_provider.dart';
 import '../services/loan_service.dart';
+import '../services/virtual_wallet_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_cards.dart';
 import 'loan_screens.dart';
 
 class HomeDashboardScreen extends StatelessWidget {
   const HomeDashboardScreen({super.key});
+
+  Future<void> _showWithdrawDialog(
+    BuildContext context, {
+    required String userId,
+    required double availableBalance,
+  }) async {
+    final amountController = TextEditingController();
+
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Withdraw to Bank Account'),
+        content: TextField(
+          controller: amountController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Amount',
+            hintText: 'e.g. 1000',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = double.tryParse(amountController.text.trim());
+              Navigator.of(context).pop(parsed);
+            },
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+
+    if (amount == null || amount <= 0) {
+      return;
+    }
+
+    if (amount > availableBalance) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('insufficient wallet balance')),
+      );
+      return;
+    }
+
+    try {
+      await VirtualWalletService().withdrawFunds(userId: userId, amount: amount);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '₹${amount.toStringAsFixed(0)} withdrawn to bank account.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) {
+        return;
+      }
+        final message = e.toString().toLowerCase().contains('insufficient wallet balance')
+          ? 'insufficient wallet balance'
+          : 'Withdrawal failed: $e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
   
   bool _isProfileVerified(UserModel? user) {
     if (user == null) {
@@ -21,19 +95,20 @@ class HomeDashboardScreen extends StatelessWidget {
         user.role.trim().isNotEmpty;
   }
   
-  List<Widget> _buildUserVerificationBadges(UserModel? user) {
+  List<Widget> _buildUserVerificationBadges(BuildContext context, UserModel? user) {
+    final l10n = context.l10n;
     final badges = <Widget>[];
   
     if (_isProfileVerified(user)) {
-      badges.add(const StatusBadge(label: 'Profile Verified', color: primaryBlue));
+      badges.add(StatusBadge(label: l10n.tr('profile_verified'), color: primaryBlue));
     }
   
     if ((user?.lockedBalance ?? 0) > 0) {
-      badges.add(const StatusBadge(label: 'Collateral Secured', color: warningAmber));
+      badges.add(StatusBadge(label: l10n.tr('collateral_secured'), color: warningAmber));
     }
   
     if ((user?.trustScore ?? 0) >= 80) {
-      badges.add(const StatusBadge(label: 'High Trust', color: trustGreen));
+      badges.add(StatusBadge(label: l10n.tr('high_trust'), color: trustGreen));
     }
   
     return badges;
@@ -41,6 +116,7 @@ class HomeDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final userProvider = context.watch<UserProvider>();
     final user = userProvider.currentUser;
     
@@ -62,41 +138,41 @@ class HomeDashboardScreen extends StatelessWidget {
               'Welcome, $borrowerName',
               style: const TextStyle(color: mutedInk, fontSize: 15),
             ),
-          if (_buildUserVerificationBadges(user).isNotEmpty) ...[
+          if (_buildUserVerificationBadges(context, user).isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: _buildUserVerificationBadges(user),
+              children: _buildUserVerificationBadges(context, user),
             ),
           ],
           if (borrowerName != null && borrowerName.trim().isNotEmpty)
             const SizedBox(height: AppSpace.x1 - 2),
-          const Text(
-            'Decentralized Hub',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+          Text(
+            l10n.tr('decentralized_hub'),
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Transparent, P2P lending on the global ledger.',
-            style: TextStyle(color: mutedInk),
+          Text(
+            l10n.tr('transparent_p2p'),
+            style: const TextStyle(color: mutedInk),
           ),
           const SizedBox(height: AppSpace.x2),
           TrustScoreCard(score: trustScore),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: role == 'borrower' ? 'Borrower Wallet' : 'Lender Wallet',
-            trailing: const TrustBadge(label: 'Virtual Money'),
+            title: role == 'borrower' ? l10n.tr('borrower_wallet') : l10n.tr('lender_wallet'),
+            trailing: TrustBadge(label: l10n.tr('virtual_money')),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Available balance: ₹${(user?.walletBalance ?? 0).toStringAsFixed(0)}',
+                  '${l10n.tr('available_balance')}: ₹${(user?.walletBalance ?? 0).toStringAsFixed(0)}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Locked collateral: ₹${(user?.lockedBalance ?? 0).toStringAsFixed(0)}',
+                  '${l10n.tr('locked_collateral')}: ₹${(user?.lockedBalance ?? 0).toStringAsFixed(0)}',
                   style: const TextStyle(color: mutedInk),
                 ),
                 const SizedBox(height: 6),
@@ -105,6 +181,18 @@ class HomeDashboardScreen extends StatelessWidget {
                       ? 'Collateral is locked as security deposit until repayment or default resolution.'
                       : 'Your wallet is used to fund approved loans and receives repayments/collateral claims.',
                   style: const TextStyle(color: mutedInk),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: user == null
+                      ? null
+                      : () => _showWithdrawDialog(
+                            context,
+                            userId: user.uid,
+                            availableBalance: user.walletBalance,
+                          ),
+                  icon: const Icon(Icons.account_balance_outlined),
+                  label: const Text('Withdraw to Bank Account'),
                 ),
               ],
             ),
@@ -155,7 +243,7 @@ class HomeDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: 'Quick Actions',
+            title: l10n.tr('quick_actions'),
             child: Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -163,7 +251,7 @@ class HomeDashboardScreen extends StatelessWidget {
                 if (role == 'borrower')
                   _actionChip(
                     icon: Icons.add_card,
-                    label: 'Request Loan',
+                    label: l10n.tr('request_loan'),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -177,7 +265,7 @@ class HomeDashboardScreen extends StatelessWidget {
                 if (role == 'borrower')
                   _actionChip(
                     icon: Icons.info_outline,
-                    label: 'Loan Details',
+                    label: l10n.tr('loan_details'),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -189,7 +277,7 @@ class HomeDashboardScreen extends StatelessWidget {
                 if (role == 'borrower')
                   _actionChip(
                     icon: Icons.payments_outlined,
-                    label: 'Repayment',
+                    label: l10n.tr('repayment'),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -201,7 +289,7 @@ class HomeDashboardScreen extends StatelessWidget {
                 if (role != 'borrower')
                   _actionChip(
                     icon: Icons.list_alt_outlined,
-                    label: 'View Loan Requests',
+                    label: l10n.tr('view_loan_requests'),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -213,7 +301,7 @@ class HomeDashboardScreen extends StatelessWidget {
                 if (role != 'borrower')
                   _actionChip(
                     icon: Icons.trending_up_outlined,
-                    label: 'Track Returns',
+                    label: l10n.tr('track_returns'),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
@@ -227,8 +315,8 @@ class HomeDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
-            title: 'Protocol Explorer',
-            trailing: const TrustBadge(label: 'Public Ledger'),
+            title: l10n.tr('protocol_explorer'),
+            trailing: TrustBadge(label: l10n.tr('public_ledger')),
             child: StreamBuilder<List<LoanModel>>(
               stream: LoanService().streamAllTransactions(),
               builder: (context, snapshot) {

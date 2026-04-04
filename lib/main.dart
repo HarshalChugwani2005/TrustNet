@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'app.dart';
 import 'firebase_options.dart';
+import 'providers/locale_provider.dart';
 import 'providers/user_provider.dart';
 
 export 'app.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
       ],
       child: const TrustNetApp(),
