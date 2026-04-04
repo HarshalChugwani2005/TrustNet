@@ -25,9 +25,17 @@ class BorrowerRequestLoanScreen extends StatefulWidget {
 
 class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
   final _amountController = TextEditingController();
-  final _durationController = TextEditingController();
+  final _durationValueController = TextEditingController(text: '1');
   final _purposeController = TextEditingController();
   bool _isLoading = false;
+  String _durationUnit = 'month';
+
+  String get _selectedDurationText {
+    final parsedValue = int.tryParse(_durationValueController.text.trim()) ?? 1;
+    final safeValue = parsedValue <= 0 ? 1 : parsedValue;
+    final suffix = safeValue == 1 ? _durationUnit : '${_durationUnit}s';
+    return '$safeValue $suffix';
+  }
 
   double _collateralPercentFromTrustScore(int trustScore) {
     if (trustScore >= 80) {
@@ -88,14 +96,15 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
   @override
   void dispose() {
     _amountController.dispose();
-    _durationController.dispose();
+    _durationValueController.dispose();
     _purposeController.dispose();
     super.dispose();
   }
 
   Future<void> _submitRequest() async {
     final amountText = _amountController.text.trim();
-    final duration = _durationController.text.trim();
+    final durationValueText = _durationValueController.text.trim();
+    final duration = _selectedDurationText;
     final purpose = _purposeController.text.trim();
 
     if (amountText.isEmpty || duration.isEmpty || purpose.isEmpty) {
@@ -109,6 +118,14 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid amount')),
+      );
+      return;
+    }
+
+    final durationValue = int.tryParse(durationValueText);
+    if (durationValue == null || durationValue <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid duration value.')),
       );
       return;
     }
@@ -253,15 +270,51 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _durationController,
-            decoration: InputDecoration(
-              labelText: 'Duration',
-              hintText: 'e.g., 3 months',
-              helperText: 'Choose realistic repayment time',
-              prefixIcon: const Icon(Icons.calendar_month_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _durationValueController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Duration Value',
+                    prefixIcon: const Icon(Icons.calendar_month_outlined),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: _durationUnit,
+                  decoration: InputDecoration(
+                    labelText: 'Duration Unit',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'day', child: Text('Days')),
+                    DropdownMenuItem(value: 'month', child: Text('Months')),
+                    DropdownMenuItem(value: 'year', child: Text('Years')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      _durationUnit = value;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Choose realistic repayment time',
+            style: TextStyle(color: mutedInk, fontSize: 12),
           ),
           const SizedBox(height: 12),
           TextField(

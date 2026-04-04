@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
 import 'home_dashboard.dart';
 import 'notifications_profile.dart';
 import 'ledger_explorer.dart';
@@ -32,28 +31,6 @@ class _DashboardShellState extends State<DashboardShell> {
         child: KeyedSubtree(
           key: ValueKey<int>(_index),
           child: pages[_index],
-        ),
-      ),
-      floatingActionButton: DecoratedBox(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: trustGreen.withValues(alpha: 0.35),
-              blurRadius: 18,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: FloatingActionButton(
-          heroTag: 'help_fab',
-          backgroundColor: trustGreen,
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Help Assistant: How can we support you?')),
-            );
-          },
-          child: const Icon(Icons.support_agent_rounded, color: Colors.white),
         ),
       ),
       bottomNavigationBar: NavigationBar(
