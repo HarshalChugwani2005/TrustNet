@@ -22,17 +22,34 @@ class UserModel {
   });
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
+    int parseInt(dynamic value, int fallback) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) {
+        return int.tryParse(value) ??
+            double.tryParse(value)?.toInt() ??
+            fallback;
+      }
+      return fallback;
+    }
+
+    double parseDouble(dynamic value, double fallback) {
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? fallback;
+      return fallback;
+    }
+
     return UserModel(
       uid: documentId,
       email: (data['email'] ?? '').toString(),
       fullName: (data['fullName'] ?? '').toString(),
       role: (data['role'] ?? 'borrower').toString(),
       phone: (data['phone'] ?? '').toString(),
-      trustScore: (data['trustScore'] ?? 50) is num
-          ? (data['trustScore'] as num).toInt()
-          : 50,
-      walletBalance: (data['wallet_balance'] ?? data['walletBalance'] ?? 0).toDouble(),
-      lockedBalance: (data['locked_balance'] ?? data['lockedBalance'] ?? 0).toDouble(),
+      trustScore: parseInt(data['trustScore'], 50),
+      walletBalance:
+          parseDouble(data['wallet_balance'] ?? data['walletBalance'], 0),
+      lockedBalance:
+          parseDouble(data['locked_balance'] ?? data['lockedBalance'], 0),
       walletAddress: data['walletAddress']?.toString(),
     );
   }
