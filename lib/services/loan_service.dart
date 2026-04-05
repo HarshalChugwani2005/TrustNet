@@ -17,6 +17,7 @@ class LoanService {
   static const int _maxTrustScore = 100;
   static const double _defaultPenaltyPoints = 25.0;
   static const double _baseInterestRate = 0.05;
+  static const Duration _newUserRestrictionWindow = Duration(days: 30);
 
   double _collateralPercentFromTrustScore(int trustScore) {
     if (trustScore >= 80) {
@@ -53,6 +54,79 @@ class LoanService {
     final match = RegExp(r'\d+').firstMatch(duration);
     final months = match == null ? 1 : int.tryParse(match.group(0) ?? '1') ?? 1;
     return months <= 0 ? 1 : months;
+  }
+
+  DateTime? _readDateTime(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is Timestamp) {
+        return value.toDate();
+      }
+      if (value is DateTime) {
+        return value;
+      }
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  }
+
+  DateTime _loanCreatedAt(Map<String, dynamic> data) {
+    return _readDateTime(data, const ['createdAt', 'created_at']) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  bool _isWithinNewUserWindow(Map<String, dynamic> userData) {
+    final createdAt =
+        _readDateTime(userData, const ['createdAt', 'accountCreatedAt', 'created_at']);
+    if (createdAt == null) {
+      return false;
+    }
+    return DateTime.now().isBefore(createdAt.add(_newUserRestrictionWindow));
+  }
+
+  bool _isInProcessLoanStatus(String status) {
+    return status == 'pending' || status == 'approved';
+  }
+
+  bool _isFundedLoanStatus(String status) {
+    return status == 'approved' ||
+        status == 'repaid' ||
+        status == 'defaulted' ||
+        status == 'written_off';
+  }
+
+  bool _isLoanRepaidOnTime(Map<String, dynamic> loanData) {
+    final status = (loanData['status'] ?? '').toString().toLowerCase();
+    if (status != 'repaid') {
+      return false;
+    }
+
+    final events = loanData['repaymentEvents'];
+    if (events is List) {
+      for (final event in events) {
+        if (event is Map<String, dynamic>) {
+          final eventType = (event['eventType'] ?? '').toString().toLowerCase();
+          if (eventType.startsWith('late_')) {
+            return false;
+          }
+        } else if (event is Map) {
+          final eventType = (event['eventType'] ?? '').toString().toLowerCase();
+          if (eventType.startsWith('late_')) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
   }
 
   double _durationInYears(String duration) {
@@ -150,6 +224,48 @@ class LoanService {
   Future<void> requestLoan(LoanModel loan) async {
     final docRef = _firestore.collection('loans').doc();
     final borrowerRef = _firestore.collection('users').doc(loan.borrowerId);
+
+    final borrowerSnapshot = await borrowerRef.get();
+    final borrowerUserData = borrowerSnapshot.data() ?? <String, dynamic>{};
+    if (_isWithinNewUserWindow(borrowerUserData)) {
+      final borrowerLoansSnapshot = await _firestore
+          .collection('loans')
+          .where('borrowerId', isEqualTo: loan.borrowerId)
+          .get();
+
+      final borrowerLoans = borrowerLoansSnapshot.docs
+          .map((doc) => doc.data())
+          .toList();
+
+      final hasInProcessLoan = borrowerLoans.any((loanData) {
+        final status = (loanData['status'] ?? '').toString().toLowerCase();
+        return _isInProcessLoanStatus(status);
+      });
+
+      if (hasInProcessLoan) {
+        throw Exception(
+          'new borrower first-30-days limit: only one loan can be in process at a time.',
+        );
+      }
+
+      final fundedLoans = borrowerLoans.where((loanData) {
+        final status = (loanData['status'] ?? '').toString().toLowerCase();
+        return _isFundedLoanStatus(status);
+      }).toList();
+
+      if (fundedLoans.isNotEmpty) {
+        fundedLoans.sort(
+          (a, b) => _loanCreatedAt(a).compareTo(_loanCreatedAt(b)),
+        );
+
+        final firstFundedLoan = fundedLoans.first;
+        if (!_isLoanRepaidOnTime(firstFundedLoan)) {
+          throw Exception(
+            'new borrower first-30-days limit: repay first loan on time before requesting another.',
+          );
+        }
+      }
+    }
 
     int borrowerTrustScore = loan.borrowerTrustScore;
     var collateralPercent = _collateralPercentFromTrustScore(borrowerTrustScore);
@@ -374,6 +490,46 @@ class LoanService {
         final lenderRef = _firestore.collection('users').doc(effectiveLenderId);
         final lenderSnap = await transaction.get(lenderRef);
         final lenderData = lenderSnap.data() ?? <String, dynamic>{};
+
+        if (_isWithinNewUserWindow(lenderData)) {
+          final lenderLoansSnapshot = await _firestore
+              .collection('loans')
+              .where('lenderId', isEqualTo: effectiveLenderId)
+              .get();
+
+          final lenderLoans = lenderLoansSnapshot.docs
+              .map((doc) => doc.data())
+              .toList();
+
+          final fundedLoans = lenderLoans.where((loanData) {
+            final status = (loanData['status'] ?? '').toString().toLowerCase();
+            return _isFundedLoanStatus(status);
+          }).toList();
+
+          final hasInProcessInvestment = fundedLoans.any((loanData) {
+            final status = (loanData['status'] ?? '').toString().toLowerCase();
+            return status == 'approved';
+          });
+
+          if (hasInProcessInvestment) {
+            throw Exception(
+              'new lender first-30-days limit: only one approved loan can be in process at a time.',
+            );
+          }
+
+          if (fundedLoans.isNotEmpty) {
+            final hasAnyRepaid = fundedLoans.any((loanData) {
+              final status = (loanData['status'] ?? '').toString().toLowerCase();
+              return status == 'repaid';
+            });
+
+            if (!hasAnyRepaid) {
+              throw Exception(
+                'new lender first-30-days limit: next approval is allowed only after borrower repayment.',
+              );
+            }
+          }
+        }
 
         final lenderWallet = _readBalance(lenderData, 'wallet_balance');
         final borrowerWallet = _readBalance(borrowerData, 'wallet_balance');

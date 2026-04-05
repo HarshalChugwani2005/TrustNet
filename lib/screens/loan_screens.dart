@@ -16,6 +16,14 @@ String _mapWalletErrorMessage(Object error, {String fallback = 'Something went w
       lowered.contains('dart exception thrown from converted future')) {
     return 'insufficient balance in wallet';
   }
+  if (lowered.contains('new borrower first-30-days limit')) {
+    return 'For first 30 days, you can keep only 1 loan in process. '
+        'Second request is allowed only after first loan is repaid on time.';
+  }
+  if (lowered.contains('new lender first-30-days limit')) {
+    return 'For first 30 days, you can approve only 1 loan in process. '
+        'Next approval is allowed only after borrower repayment.';
+  }
   return fallback;
 }
 

@@ -188,10 +188,30 @@ class AuthService {
       payload['phone'] = normalizedPhone;
     }
 
-    await _firestore.collection('users').doc(uid).set(
-          payload,
-          SetOptions(merge: true),
-        );
+    final userRef = _firestore.collection('users').doc(uid);
+    await _firestore.runTransaction((transaction) async {
+      final userSnap = await transaction.get(userRef);
+      final existing = userSnap.data() ?? <String, dynamic>{};
+      final hasCreatedAt = existing['createdAt'] != null ||
+          existing['accountCreatedAt'] != null ||
+          existing['created_at'] != null;
+
+      final payloadWithCreatedAt = <String, dynamic>{...payload};
+      if (!hasCreatedAt) {
+        final authCreatedAt = _auth.currentUser?.uid == uid
+          ? _auth.currentUser?.metadata.creationTime
+          : null;
+        payloadWithCreatedAt['createdAt'] = authCreatedAt != null
+          ? Timestamp.fromDate(authCreatedAt)
+          : FieldValue.serverTimestamp();
+      }
+
+      transaction.set(
+        userRef,
+        payloadWithCreatedAt,
+        SetOptions(merge: true),
+      );
+    });
 
     try {
       await WalletBridgeService().ensureWalletForUser(uid);
