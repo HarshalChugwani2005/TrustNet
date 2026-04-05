@@ -36,7 +36,7 @@ class VirtualWalletService {
       final currentBalance = (data['wallet_balance'] ?? 0).toDouble();
 
       if (currentBalance < amount) {
-        throw Exception('insufficient wallet balance');
+        throw Exception('insufficient balance in wallet');
       }
 
       transaction.set(

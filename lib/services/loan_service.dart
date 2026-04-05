@@ -186,8 +186,7 @@ class LoanService {
       final lockedBalance = _readBalance(borrowerData, 'locked_balance');
 
       if (walletBalance < collateralAmount) {
-        throw Exception(
-        'Insufficient wallet balance for collateral. Required: ₹${collateralAmount.toStringAsFixed(0)}. Please add funds first.');
+        throw Exception('insufficient balance in wallet');
       }
 
       transaction.set(
@@ -381,7 +380,7 @@ class LoanService {
         final loanAmount = (loanData['amount'] ?? loan.amount).toDouble();
 
         if (lenderWallet < loanAmount) {
-          throw Exception('Lender wallet has insufficient balance to fund this loan.');
+          throw Exception('insufficient balance in wallet');
         }
 
         transaction.set(
@@ -640,7 +639,7 @@ class LoanService {
       final lenderWallet = _readBalance(lenderData, 'wallet_balance');
 
       if (borrowerWallet < paymentAmount) {
-        throw Exception('Borrower wallet has insufficient balance for repayment.');
+        throw Exception('insufficient balance in wallet');
       }
 
       transaction.set(

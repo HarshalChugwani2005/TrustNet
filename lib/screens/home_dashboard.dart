@@ -58,7 +58,7 @@ class HomeDashboardScreen extends StatelessWidget {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('insufficient wallet balance')),
+        const SnackBar(content: Text('insufficient balance in wallet')),
       );
       return;
     }
@@ -79,9 +79,12 @@ class HomeDashboardScreen extends StatelessWidget {
       if (!context.mounted) {
         return;
       }
-        final message = e.toString().toLowerCase().contains('insufficient wallet balance')
-          ? 'insufficient wallet balance'
-          : 'Withdrawal failed: $e';
+      final lowered = e.toString().toLowerCase();
+      final message =
+          (lowered.contains('insufficient') && lowered.contains('wallet')) ||
+                  lowered.contains('dart exception thrown from converted future')
+              ? 'insufficient balance in wallet'
+              : 'Unable to withdraw funds';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }

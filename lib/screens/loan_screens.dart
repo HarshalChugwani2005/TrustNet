@@ -10,6 +10,15 @@ import '../services/virtual_wallet_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/common_cards.dart';
 
+String _mapWalletErrorMessage(Object error, {String fallback = 'Something went wrong'}) {
+  final lowered = error.toString().toLowerCase();
+  if ((lowered.contains('insufficient') && lowered.contains('wallet')) ||
+      lowered.contains('dart exception thrown from converted future')) {
+    return 'insufficient balance in wallet';
+  }
+  return fallback;
+}
+
 class BorrowerRequestLoanScreen extends StatefulWidget {
   final int trustScore;
 
@@ -190,13 +199,7 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
       final totalRepayable = _round2(amount + interestAmount);
       if (user.walletBalance < collateralEstimate) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              user.walletBalance <= 0
-                  ? 'No funds available in wallet. Please add funds before requesting a loan.'
-                  : 'Insufficient wallet funds for collateral. Need ₹${collateralEstimate.toStringAsFixed(0)}.',
-            ),
-          ),
+          const SnackBar(content: Text('insufficient balance in wallet')),
         );
         return;
       }
@@ -235,11 +238,10 @@ class _BorrowerRequestLoanScreenState extends State<BorrowerRequestLoanScreen> {
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
-      final errorText = e.toString();
-      final friendlyMessage =
-          errorText.contains('Insufficient wallet balance for collateral')
-              ? 'No funds available in wallet. Please add funds before requesting a loan.'
-              : 'Failed to submit: $e';
+      final friendlyMessage = _mapWalletErrorMessage(
+        e,
+        fallback: 'Failed to submit request',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(friendlyMessage)),
       );
@@ -444,7 +446,14 @@ class LenderLoanRequestsScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                _mapWalletErrorMessage(
+                  snapshot.error!,
+                  fallback: 'Unable to load loan requests',
+                ),
+              ),
+            );
           }
 
           final loans = snapshot.data ?? [];
@@ -639,10 +648,19 @@ class _LenderBorrowerDetailsScreenState
     setState(() => _isLoading = true);
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final lenderId = userProvider.currentUser?.uid;
+      final lender = userProvider.currentUser;
+      final lenderId = lender?.uid;
 
       if (lenderId == null || lenderId.isEmpty) {
         throw StateError('Unable to determine the current lender.');
+      }
+
+      if (status == 'approved' && (lender?.walletBalance ?? 0) < widget.loan.amount) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('insufficient balance in wallet')),
+        );
+        return;
       }
       
       await LoanService().updateLoanStatus(
@@ -666,8 +684,12 @@ class _LenderBorrowerDetailsScreenState
       );
     } catch (e) {
       if (!mounted) return;
+      final message = _mapWalletErrorMessage(
+        e,
+        fallback: 'Unable to update loan status',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e')),
+        SnackBar(content: Text(message)),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1088,7 +1110,11 @@ class _RepaymentScreenState extends State<RepaymentScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      final message = _mapWalletErrorMessage(
+        e,
+        fallback: 'Unable to process repayment',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isPaying = false);
     }
