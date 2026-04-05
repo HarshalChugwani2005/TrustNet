@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
 import '../models/loan_model.dart';
 import '../models/user_model.dart';
@@ -247,6 +248,367 @@ class RiskExplainabilityPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class TrustGraphCard extends StatelessWidget {
+  final UserModel user;
+  final List<LoanModel> loans;
+
+  const TrustGraphCard({
+    super.key,
+    required this.user,
+    required this.loans,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final insight = _TrustGraphInsight.fromData(user: user, loans: loans);
+
+    return SectionCard(
+      title: 'Trust Graph',
+      trailing: StatusBadge(label: insight.reliabilityLabel, color: insight.reliabilityColor),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Confidence propagates across your network',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            insight.summary,
+            style: TextStyle(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : mutedInk,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 180,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: _TrustGraphPainter(insight: insight, context: context),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              StatusBadge(
+                label: 'Network nodes: ${insight.totalNodes}',
+                color: primaryBlue,
+              ),
+              StatusBadge(
+                label: 'Lender links: ${insight.lenderNodes.length}',
+                color: trustGreen,
+              ),
+              StatusBadge(
+                label: 'Referral links: ${insight.referralNodes.length}',
+                color: warningAmber,
+              ),
+            ],
+          ),
+          if (insight.lenderNodes.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Lender confidence spread',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            ...insight.lenderNodes.take(3).map(
+              (node) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _TrustSpreadRow(node: node, icon: Icons.account_balance_outlined),
+              ),
+            ),
+          ],
+          if (insight.referralNodes.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Text(
+              'Referral confidence spread',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            ...insight.referralNodes.take(3).map(
+              (node) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _TrustSpreadRow(node: node, icon: Icons.group_outlined),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TrustSpreadRow extends StatelessWidget {
+  final _TrustGraphNode node;
+  final IconData icon;
+
+  const _TrustSpreadRow({
+    required this.node,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: node.color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: node.color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: node.color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              node.label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '+${node.confidenceGain.toStringAsFixed(0)} conf',
+            style: TextStyle(color: node.color, fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrustGraphNode {
+  final String id;
+  final String label;
+  final double confidenceGain;
+  final Color color;
+
+  const _TrustGraphNode({
+    required this.id,
+    required this.label,
+    required this.confidenceGain,
+    required this.color,
+  });
+}
+
+class _TrustGraphInsight {
+  final String reliabilityLabel;
+  final Color reliabilityColor;
+  final String summary;
+  final double spreadFactor;
+  final List<_TrustGraphNode> lenderNodes;
+  final List<_TrustGraphNode> referralNodes;
+
+  const _TrustGraphInsight({
+    required this.reliabilityLabel,
+    required this.reliabilityColor,
+    required this.summary,
+    required this.spreadFactor,
+    required this.lenderNodes,
+    required this.referralNodes,
+  });
+
+  int get totalNodes => 1 + lenderNodes.length + referralNodes.length;
+
+  static _TrustGraphInsight fromData({required UserModel user, required List<LoanModel> loans}) {
+    final completed = loans.where((loan) =>
+        loan.status == 'repaid' || loan.status == 'defaulted' || loan.status == 'written_off').toList();
+    final active = loans.where((loan) => loan.status == 'approved').toList();
+    final reliable = completed.where((loan) => loan.status == 'repaid' && !loan.latePenaltyApplied).length;
+    final defaults = completed.where((loan) =>
+        loan.status == 'defaulted' || loan.status == 'written_off').length;
+    final bestStreak = loans.fold<int>(
+      0,
+      (current, loan) => loan.onTimeStreak > current ? loan.onTimeStreak : current,
+    );
+
+    final repaymentProgressRatios = active
+        .where((loan) => loan.totalRepayable > 0)
+        .map((loan) => (loan.repaidAmount / loan.totalRepayable).clamp(0.0, 1.0))
+        .toList();
+    final partialProgress = repaymentProgressRatios.isEmpty
+        ? 0.0
+        : repaymentProgressRatios.reduce((a, b) => a + b) / repaymentProgressRatios.length;
+
+    final recentRepayments = loans.where((loan) {
+      final last = loan.lastRepaidAt;
+      if (last == null) {
+        return false;
+      }
+      return DateTime.now().difference(last).inDays <= 7;
+    }).length;
+
+    final completionReliability = completed.isEmpty ? 0.5 : reliable / completed.length;
+    final streakSignal = (bestStreak / 6).clamp(0.0, 1.0);
+    final recencySignal = recentRepayments > 0 ? 1.0 : 0.0;
+
+    final spreadFactor = (
+      (completionReliability * 0.40) +
+      (partialProgress * 0.25) +
+      (streakSignal * 0.20) +
+      (recencySignal * 0.10) +
+      ((user.trustScore / 100) * 0.15) -
+      (defaults * 0.12)
+    ).clamp(0.0, 1.0);
+
+    final reliabilityLabel = spreadFactor >= 0.75
+        ? 'High Network Trust'
+        : spreadFactor >= 0.5
+            ? 'Growing Trust'
+            : 'Early Network Signal';
+    final reliabilityColor = spreadFactor >= 0.75
+        ? trustGreen
+        : spreadFactor >= 0.5
+            ? warningAmber
+            : primaryBlue;
+
+    final lenders = <String>{};
+    for (final loan in loans) {
+      final lenderId = loan.lenderId?.trim();
+      if (lenderId != null && lenderId.isNotEmpty) {
+        lenders.add(lenderId);
+      }
+    }
+
+    final lenderNodes = lenders.take(6).toList().asMap().entries.map((entry) {
+      final index = entry.key;
+      final lenderId = entry.value;
+      final gain = (8 + (spreadFactor * 18) + math.max(0, user.trustScore - 50) * 0.08)
+          .clamp(4.0, 30.0);
+      return _TrustGraphNode(
+        id: lenderId,
+        label: _shortLabel('Lender', lenderId, index),
+        confidenceGain: gain,
+        color: trustGreen,
+      );
+    }).toList();
+
+    final referralNodes = user.referralIds.take(6).toList().asMap().entries.map((entry) {
+      final index = entry.key;
+      final referralId = entry.value;
+      final gain = (5 + (spreadFactor * 14) + (user.trustScore / 100) * 4)
+          .clamp(3.0, 24.0);
+      return _TrustGraphNode(
+        id: referralId,
+        label: _shortLabel('Referral', referralId, index),
+        confidenceGain: gain,
+        color: warningAmber,
+      );
+    }).toList();
+
+    final summary = recentRepayments > 0 || partialProgress > 0
+      ? 'Latest repayment activity is boosting confidence spread across connected lenders and referrals in real time.'
+      : completed.isEmpty
+        ? 'Start repaying loans to activate stronger confidence spread to lenders and referrals.'
+        : 'Reliable repayments increase confidence signals across connected lenders and referral links.';
+
+    return _TrustGraphInsight(
+      reliabilityLabel: reliabilityLabel,
+      reliabilityColor: reliabilityColor,
+      summary: summary,
+      spreadFactor: spreadFactor,
+      lenderNodes: lenderNodes,
+      referralNodes: referralNodes,
+    );
+  }
+
+  static String _shortLabel(String prefix, String id, int index) {
+    final clean = id.trim();
+    if (clean.length <= 8) {
+      return '$prefix ${index + 1} ($clean)';
+    }
+    return '$prefix ${index + 1} (${clean.substring(0, 4)}...${clean.substring(clean.length - 3)})';
+  }
+}
+
+class _TrustGraphPainter extends CustomPainter {
+  final _TrustGraphInsight insight;
+  final BuildContext context;
+
+  const _TrustGraphPainter({required this.insight, required this.context});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width * 0.5, size.height * 0.52);
+    final baseRadius = math.min(size.width, size.height) * 0.28;
+    final ambient = Paint()
+      ..color = primaryBlue.withValues(alpha: 0.05)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawCircle(center, baseRadius * 1.35, ambient);
+
+    final borrowerPaint = Paint()..color = primaryBlue;
+    final borrowerRadius = 16.0;
+    canvas.drawCircle(center, borrowerRadius, borrowerPaint);
+
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: 'You',
+      style: TextStyle(
+        color: Theme.of(context).colorScheme.onSurface,
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(canvas, Offset(center.dx - textPainter.width / 2, center.dy + 20));
+
+    final nodes = <_PaintNode>[];
+    final lenders = insight.lenderNodes;
+    final referrals = insight.referralNodes;
+    final lenderStep = lenders.isEmpty ? 0.0 : (math.pi * 1.1) / lenders.length;
+    final referralStep = referrals.isEmpty ? 0.0 : (math.pi * 1.1) / referrals.length;
+
+    for (var i = 0; i < lenders.length; i++) {
+      final angle = math.pi * 1.95 + (lenderStep * i);
+      nodes.add(_PaintNode(node: lenders[i], angle: angle, ring: 1.0));
+    }
+    for (var i = 0; i < referrals.length; i++) {
+      final angle = math.pi * 0.95 + (referralStep * i);
+      nodes.add(_PaintNode(node: referrals[i], angle: angle, ring: 0.78));
+    }
+
+    for (final paintNode in nodes) {
+      final nodeDistance = baseRadius * (1.2 + (paintNode.ring * 0.5));
+      final point = Offset(
+        center.dx + math.cos(paintNode.angle) * nodeDistance,
+        center.dy + math.sin(paintNode.angle) * nodeDistance,
+      );
+
+      final edge = Paint()
+        ..color = paintNode.node.color.withValues(alpha: 0.3 + (insight.spreadFactor * 0.35))
+        ..strokeWidth = 1.5 + (paintNode.node.confidenceGain / 16)
+        ..style = PaintingStyle.stroke;
+      canvas.drawLine(center, point, edge);
+
+      final nodePaint = Paint()..color = paintNode.node.color;
+      final nodeRadius = (5 + (paintNode.node.confidenceGain / 10)).clamp(5.0, 9.0);
+      canvas.drawCircle(point, nodeRadius, nodePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrustGraphPainter oldDelegate) {
+    return oldDelegate.insight != insight;
+  }
+}
+
+class _PaintNode {
+  final _TrustGraphNode node;
+  final double angle;
+  final double ring;
+
+  const _PaintNode({
+    required this.node,
+    required this.angle,
+    required this.ring,
+  });
 }
 
 class _RiskSignalRow extends StatelessWidget {

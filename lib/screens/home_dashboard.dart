@@ -168,7 +168,13 @@ class HomeDashboardScreen extends StatelessWidget {
               stream: LoanService().streamBorrowerLoans(user.uid),
               builder: (context, snapshot) {
                 final loans = snapshot.data ?? const <LoanModel>[];
-                return RiskExplainabilityPanel(user: user, loans: loans);
+                return Column(
+                  children: [
+                    RiskExplainabilityPanel(user: user, loans: loans),
+                    const SizedBox(height: AppSpace.x2 - 2),
+                    TrustGraphCard(user: user, loans: loans),
+                  ],
+                );
               },
             ),
           ],

@@ -4,10 +4,13 @@ class UserModel {
   final String fullName;
   final String role;
   final String phone;
+  final List<String>? _referralIds;
   final int trustScore;
   final double walletBalance;
   final double lockedBalance;
   final String? walletAddress;
+
+  List<String> get referralIds => _referralIds ?? const [];
 
   UserModel({
     required this.uid,
@@ -15,11 +18,12 @@ class UserModel {
     required this.fullName,
     required this.role,
     this.phone = '',
+    List<String>? referralIds,
     this.trustScore = 50,
     this.walletBalance = 0,
     this.lockedBalance = 0,
     this.walletAddress,
-  });
+  }) : _referralIds = referralIds;
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
     int parseInt(dynamic value, int fallback) {
@@ -45,6 +49,12 @@ class UserModel {
       fullName: (data['fullName'] ?? '').toString(),
       role: (data['role'] ?? 'borrower').toString(),
       phone: (data['phone'] ?? '').toString(),
+        referralIds: ((data['referralIds'] ?? data['referrals']) is List)
+          ? ((data['referralIds'] ?? data['referrals']) as List)
+            .map((id) => id.toString())
+            .where((id) => id.isNotEmpty)
+            .toList()
+          : const [],
       trustScore: parseInt(data['trustScore'], 50),
       walletBalance:
           parseDouble(data['wallet_balance'] ?? data['walletBalance'], 0),
@@ -60,6 +70,7 @@ class UserModel {
       'fullName': fullName,
       'role': role,
       'phone': phone,
+      'referralIds': referralIds,
       'trustScore': trustScore,
       'wallet_balance': walletBalance,
       'locked_balance': lockedBalance,
