@@ -22,6 +22,11 @@ class LoanModel {
   final String? txHash;
   final int? blockNumber;
   final int? onChainLoanId;
+  final int onTimeStreak;
+  final DateTime? nextDueAt;
+  final DateTime? lastRepaidAt;
+  final String executionMode;
+  final String chainNetwork;
   final DateTime? createdAt;
 
   LoanModel({
@@ -46,10 +51,21 @@ class LoanModel {
     this.txHash,
     this.blockNumber,
     this.onChainLoanId,
+    this.onTimeStreak = 0,
+    this.nextDueAt,
+    this.lastRepaidAt,
+    this.executionMode = 'simulated',
+    this.chainNetwork = '',
     this.createdAt,
   });
 
   factory LoanModel.fromMap(Map<String, dynamic> data, String documentId) {
+    DateTime? parseDate(dynamic value) {
+      if (value is Timestamp) return value.toDate();
+      if (value is DateTime) return value;
+      return null;
+    }
+
     return LoanModel(
       id: documentId,
       borrowerId: data['borrowerId'] ?? '',
@@ -59,14 +75,14 @@ class LoanModel {
       duration: data['duration'] ?? '',
       purpose: data['purpose'] ?? '',
       status: data['status'] ?? 'pending',
-        interestRate: (data['interestRate'] ?? 0).toDouble(),
-        interestAmount: (data['interestAmount'] ?? 0).toDouble(),
-        totalRepayable: ((data['totalRepayable'] ??
+      interestRate: (data['interestRate'] ?? 0).toDouble(),
+      interestAmount: (data['interestAmount'] ?? 0).toDouble(),
+      totalRepayable: ((data['totalRepayable'] ??
               ((data['amount'] ?? 0).toDouble() +
-                (data['interestAmount'] ?? 0).toDouble()))
-            as num)
+                  (data['interestAmount'] ?? 0).toDouble()))
+          as num)
           .toDouble(),
-          latePenaltyApplied: data['latePenaltyApplied'] ?? false,
+      latePenaltyApplied: data['latePenaltyApplied'] ?? false,
       repaidAmount: (data['repaidAmount'] ?? 0).toDouble(),
       collateralAmount: (data['collateralAmount'] ?? 0).toDouble(),
       collateralPercent: (data['collateralPercent'] ?? 0).toDouble(),
@@ -76,7 +92,12 @@ class LoanModel {
       txHash: data['txHash'],
       blockNumber: data['blockNumber'],
       onChainLoanId: data['onChainLoanId'],
-      createdAt: data['createdAt'] != null 
+      onTimeStreak: (data['onTimeStreak'] as num?)?.toInt() ?? 0,
+      nextDueAt: parseDate(data['nextDueAt']),
+      lastRepaidAt: parseDate(data['lastRepaidAt']),
+      executionMode: (data['executionMode'] ?? 'simulated').toString(),
+      chainNetwork: (data['chainNetwork'] ?? '').toString(),
+      createdAt: data['createdAt'] != null
           ? (data['createdAt'] as Timestamp).toDate()
           : null,
     );
@@ -104,6 +125,11 @@ class LoanModel {
       'txHash': txHash,
       'blockNumber': blockNumber,
       'onChainLoanId': onChainLoanId,
+      'onTimeStreak': onTimeStreak,
+      'nextDueAt': nextDueAt != null ? Timestamp.fromDate(nextDueAt!) : null,
+      'lastRepaidAt': lastRepaidAt != null ? Timestamp.fromDate(lastRepaidAt!) : null,
+      'executionMode': executionMode,
+      'chainNetwork': chainNetwork,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
   }

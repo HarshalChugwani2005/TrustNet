@@ -162,6 +162,16 @@ class HomeDashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.x2),
           TrustScoreCard(score: trustScore),
+          if (role == 'borrower' && user != null) ...[
+            const SizedBox(height: AppSpace.x2 - 2),
+            StreamBuilder<List<LoanModel>>(
+              stream: LoanService().streamBorrowerLoans(user.uid),
+              builder: (context, snapshot) {
+                final loans = snapshot.data ?? const <LoanModel>[];
+                return RiskExplainabilityPanel(user: user, loans: loans);
+              },
+            ),
+          ],
           const SizedBox(height: AppSpace.x2 - 2),
           SectionCard(
             title: role == 'borrower' ? l10n.tr('borrower_wallet') : l10n.tr('lender_wallet'),
